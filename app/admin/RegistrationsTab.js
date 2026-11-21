@@ -1,0 +1,89 @@
+"use client";
+import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { t, tr } from "../../lib/i18n";
+import { send, failText } from "./api";
+
+export default function RegistrationsTab({ regs, lang = "en" }) {
+  const router = useRouter();
+  const [filter, setFilter] = useState("pending");
+  const [q, setQ] = useState("");
+  const [busyId, setBusyId] = useState("");
+  const [msg, setMsg] = useState(null);
+  const locale = lang === "bn" ? "bn-BD" : "en-GB";
+
+  const counts = useMemo(() => ({
+    pending: regs.filter((r) => r.status === "pending").length,
+    approved: regs.filter((r) => r.status === "approved").length,
+    rejected: regs.filter((r) => r.status === "rejected").length,
+    attended: regs.filter((r) => r.attended_at).length,
+    all: regs.length,
+  }), [regs]);
+
+  const term = q.trim().toLowerCase();
+  const list = useMemo(() => regs.filter((r) => {
+    const okFilter = filter === "all" || (filter === "attended" ? !!r.attended_at : r.status === filter);
+    return okFilter && (!term || [r.full_name, r.trx_id, r.ssc_batch, r.phone, r.reg_code, r.profession].some((v) => (v || "").toLowerCase().includes(term)));
+  }), [regs, filter, term]);
+
+  async function act(r, action, value) {
+    if (action === "delete" && !confirm(t(lang, "confirmDelete"))) return;
+    if (action === "reject" && !confirm(tr(lang, `${r.full_name}-এর নিবন্ধন বাতিল করবেন?`, `Reject the registration of ${r.full_name}?`))) return;
+    setBusyId(r.id); setMsg(null);
+    const res = await send("/api/admin/registration", { id: r.id, action, value });
+    setBusyId("");
+    if (res.ok) { router.refresh(); return; }
+    setMsg({ type: "error", text: failText(res, t(lang, "actionFailed"), tr, lang) });
+  }
+
+  const filters = [["pending", t(lang, "pending")], ["approved", t(lang, "approved")], ["rejected", t(lang, "rejected")], ["attended", tr(lang, "উপস্থিত", "Attended")], ["all", t(lang, "all")]];
+
+  return <>
+    <div className="toolbar">
+      <input type="search" placeholder={t(lang, "search")} aria-label={t(lang, "search")} value={q} onChange={(e) => setQ(e.target.value)} />
+      <a className="btn ghost" href="/api/admin/export" download>{t(lang, "download")}</a>
+    </div>
+    <div className="tabs" role="group" aria-label={t(lang, "registrations")}>
+      {filters.map(([key, label]) => (
+        <button key={key} type="button" className={"btn chip " + (filter === key ? "" : "ghost")} aria-pressed={filter === key} onClick={() => setFilter(key)}>
+          {label} ({counts[key]})
+        </button>
+      ))}
+    </div>
+    {msg && <p className={msg.type === "error" ? "error-panel" : "success-panel"} role="alert">{msg.text}</p>}
+    {list.length === 0 && <p className="card">{t(lang, "noRecords")}</p>}
+
+    {list.map((r) => {
+      const busy = busyId === r.id;
+      return (
+        <article className="card item" key={r.id}>
+          {r.photo_url
+            ? <a href={r.photo_url} target="_blank" rel="noreferrer" aria-label={tr(lang, "ছবি বড় করে দেখুন", "Open photo")}><img className="avatar" src={r.photo_url} alt={r.full_name} loading="lazy" decoding="async" /></a>
+            : <div className="avatar placeholder" aria-hidden="true">{Array.from(r.full_name || "?")[0]}</div>}
+          <div>
+            <div className="item-title"><b>{r.full_name}</b> <span className={"badge " + r.status}>{t(lang, r.status)}</span></div>
+            <div className="item-meta">
+              <span>{t(lang, "sscBatchLabel")}: <b>{r.ssc_batch}</b></span>
+              <span>{t(lang, "profession")}: {r.profession || "—"}</span>
+              {r.phone && <span>{t(lang, "phoneLabel")}: <a href={"tel:" + r.phone}>{r.phone}</a></span>}
+              <span>{t(lang, "transactionLabel")}: <b>{r.trx_id}</b>{r.pay_method && <span className="tag">{r.pay_method === "bank" ? tr(lang, "ব্যাংক", "Bank") : r.pay_method === "nagad" ? "Nagad" : "bKash"}</span>}</span>
+              {r.reg_code && <span>ID: <b>{r.reg_code}</b></span>}
+              <span className="muted">{new Date(r.created_at).toLocaleString(locale, { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })}</span>
+            </div>
+            {r.attended_at && <div className="success-panel compact">✓ {tr(lang, "উপস্থিত:", "Attended:")} {new Date(r.attended_at).toLocaleString(locale, { timeZone: "Asia/Dhaka", dateStyle: "medium", timeStyle: "short" })}</div>}
+            <div className="row">
+              {r.status !== "approved" && <button type="button" className="btn ok small" disabled={busy} onClick={() => act(r, "approve")}>{t(lang, "approve")}</button>}
+              {r.status === "pending" && <button type="button" className="btn bad small" disabled={busy} onClick={() => act(r, "reject")}>{t(lang, "reject")}</button>}
+              {r.status !== "pending" && <button type="button" className="btn ghost small" disabled={busy} onClick={() => act(r, "pending")}>{tr(lang, "অপেক্ষমাণে ফেরান", "Move to pending")}</button>}
+              {r.status === "approved" && <>
+                <button type="button" className="btn ghost small" disabled={busy} onClick={() => act(r, "attended", !r.attended_at)}>{r.attended_at ? tr(lang, "উপস্থিতি বাতিল", "Undo attendance") : tr(lang, "উপস্থিত চিহ্নিত করুন", "Mark attended")}</button>
+                <button type="button" className="btn ghost small" disabled={busy} onClick={() => act(r, "phone_public", !r.phone_public)}>{r.phone_public ? tr(lang, "ফোন গোপন করুন", "Hide phone") : tr(lang, "ফোন প্রকাশ করুন", "Publish phone")}</button>
+              </>}
+              <button type="button" className="btn ghost small danger-text" disabled={busy} onClick={() => act(r, "delete")}>{t(lang, "delete")}</button>
+            </div>
+          </div>
+        </article>
+      );
+    })}
+  </>;
+}

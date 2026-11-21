@@ -1,0 +1,28 @@
+{
+  "name": "reunion",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "next": "16.4.6",
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "qrcode": "^1.5.4"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  },
+  "browserslist": [
+    "chrome >= 80",
+    "edge >= 80",
+    "firefox >= 78",
+    "safari >= 13",
+    "ios_saf >= 13",
+    "samsung >= 12",
+    "not dead"
+  ]
+}
