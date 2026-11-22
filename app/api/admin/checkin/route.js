@@ -3,6 +3,7 @@ import { db } from "../../../../lib/supabase";
 import { isAdmin } from "../../../../lib/auth";
 import { csrfGuard, rateLimit } from "../../../../lib/security";
 import { fail, json, dbFail, UUID_RE } from "../../../../lib/http";
+import { signedUrlMap } from "../../../../lib/photos";
 
 const CODE_RE = /^REU-\d{4,8}$/;
 
@@ -28,10 +29,10 @@ const ACTIONS = {
 };
 
 const REGISTRATION_FIELDS =
-  "id,full_name,ssc_batch,profession,reg_code,status,attended_at,attended_by,gift_received_at,gift_received_by,food_received_at,food_received_by";
+  "id,full_name,ssc_batch,profession,reg_code,status,photo_path,attended_at,attended_by,gift_received_at,gift_received_by,food_received_at,food_received_by";
 
 export async function POST(req) {
-  // Admin-only access
+  // Admin authentication
   if (!(await isAdmin())) {
     return fail("Unauthorized", 401);
   }
@@ -41,22 +42,14 @@ export async function POST(req) {
   if (csrf) return csrf;
 
   // Rate limiting
-  const limited = await rateLimit(
-    req,
-    "admin-checkin",
-    120,
-    60
-  );
-
+  const limited = await rateLimit(req, "admin-checkin", 120, 60);
   if (limited) return limited;
 
   const body = await req.json().catch(() => ({}));
 
-  // Find registration by QR token or Registration ID
+  // Read QR token or registration ID
   const token =
-    typeof body.token === "string"
-      ? body.token.trim()
-      : "";
+    typeof body.token === "string" ? body.token.trim() : "";
 
   const code =
     typeof body.code === "string"
@@ -78,7 +71,7 @@ export async function POST(req) {
 
   const sb = db();
 
-  // VERIFY ALUMNI
+  // VERIFY ALUMNI AND GET PHOTO
   if (body.action === "verify") {
     const { data, error } = await sb
       .from("registrations")
@@ -100,16 +93,36 @@ export async function POST(req) {
     }
 
     if (data.status !== "approved") {
-      return fail(
-        "This registration is not approved.",
-        409
-      );
+      return fail("This registration is not approved.", 409);
+    }
+
+    // Generate a temporary signed URL for the alumni photo
+    let photoUrl = null;
+
+    if (data.photo_path) {
+      try {
+        const urls = await signedUrlMap(
+          sb,
+          [data.photo_path],
+          3600
+        );
+
+        photoUrl = urls[data.photo_path] || null;
+      } catch (photoError) {
+        console.error(
+          "[checkin:photo]",
+          photoError?.message || photoError
+        );
+      }
     }
 
     return json(
       {
         ok: true,
-        registration: data,
+        registration: {
+          ...data,
+          photo_url: photoUrl,
+        },
         already_attended: !!data.attended_at,
       },
       200,
@@ -117,7 +130,8 @@ export async function POST(req) {
     );
   }
 
-  // ATTENDANCE, GIFT AND FOOD ACTIONS
+  // MARK ATTENDANCE, GIFT OR FOOD
+  // Unmark actions are intentionally not available here.
   const config = ACTIONS[body.action];
 
   if (!config) {
@@ -131,7 +145,6 @@ export async function POST(req) {
     [config.by]: "admin",
   };
 
-  // Update only if this action has not already been completed.
   const { data, error } = await sb
     .from("registrations")
     .update(updateData)
@@ -158,8 +171,7 @@ export async function POST(req) {
     });
   }
 
-  // Check whether the registration exists and whether
-  // this action has already been completed.
+  // Check why the update did not happen
   const { data: existing, error: lookupError } = await sb
     .from("registrations")
     .select(REGISTRATION_FIELDS)
@@ -180,21 +192,14 @@ export async function POST(req) {
   }
 
   if (existing.status !== "approved") {
-    return fail(
-      "This registration is not approved.",
-      409
-    );
+    return fail("This registration is not approved.", 409);
   }
 
   if (existing[config.timestamp]) {
-    return fail(
-      config.already,
-      409,
-      {
-        already_received: true,
-        registration: existing,
-      }
-    );
+    return fail(config.already, 409, {
+      already_received: true,
+      registration: existing,
+    });
   }
 
   return fail(

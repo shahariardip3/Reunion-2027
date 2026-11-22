@@ -83,20 +83,13 @@ export default function CheckinScanner({ lang = "en" }) {
     };
 
     const begin = () => {
-      video
-        .play()
-        .then(() => {
-          if (active) frame = requestAnimationFrame(scan);
-        })
-        .catch(() =>
-          setError(
-            tr(
-              lang,
-              "ক্যামেরা চালু করা যায়নি।",
-              "Could not start the camera preview."
-            )
-          )
+      video.play().then(() => {
+        if (active) frame = requestAnimationFrame(scan);
+      }).catch(() => {
+        setError(
+          tr(lang, "ক্যামেরা চালু করা যায়নি।", "Could not start the camera preview.")
         );
+      });
     };
 
     if (video.readyState >= 1) {
@@ -127,38 +120,27 @@ export default function CheckinScanner({ lang = "en" }) {
       return setError(
         tr(
           lang,
-          "এই ব্রাউজারে ক্যামেরা QR স্ক্যান চলে না। Android-এ Chrome ব্যবহার করুন অথবা নিচে Registration ID লিখুন।",
-          "This browser cannot scan QR codes. Use Chrome on Android or enter the Registration ID below."
+          "এই ব্রাউজারে QR স্ক্যান চলে না। Chrome ব্যবহার করুন অথবা Registration ID লিখুন।",
+          "QR scanning is not supported in this browser. Use Chrome or enter the Registration ID."
         )
       );
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
       return setError(
-        tr(
-          lang,
-          "ক্যামেরার জন্য HTTPS বা localhost দরকার।",
-          "Camera requires HTTPS or localhost."
-        )
+        tr(lang, "ক্যামেরার জন্য HTTPS দরকার।", "Camera requires HTTPS.")
       );
     }
 
     try {
       streamRef.current = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-        },
+        video: { facingMode: { ideal: "environment" } },
         audio: false,
       });
-
       setCamera(true);
     } catch {
       setError(
-        tr(
-          lang,
-          "ক্যামেরার অনুমতি পাওয়া যায়নি।",
-          "Camera permission was denied or no camera is available."
-        )
+        tr(lang, "ক্যামেরার অনুমতি পাওয়া যায়নি।", "Camera permission denied or unavailable.")
       );
     }
   }
@@ -166,17 +148,11 @@ export default function CheckinScanner({ lang = "en" }) {
   async function call(action, parsed) {
     const response = await fetch("/api/admin/checkin", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        action,
-        ...parsed,
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...parsed }),
     });
 
     const data = await response.json().catch(() => ({}));
-
     return { response, data };
   }
 
@@ -188,11 +164,7 @@ export default function CheckinScanner({ lang = "en" }) {
 
     if (!parsed) {
       return setError(
-        tr(
-          lang,
-          "QR টোকেন বা ID সঠিক নয়। উদাহরণ: REU-0012",
-          "Invalid QR token or ID. Example: REU-0012."
-        )
+        tr(lang, "QR টোকেন বা ID সঠিক নয়। উদাহরণ: REU-0012", "Invalid QR token or ID. Example: REU-0012.")
       );
     }
 
@@ -203,31 +175,19 @@ export default function CheckinScanner({ lang = "en" }) {
 
       if (!response.ok) {
         throw new Error(
-          response.status === 404
+          data.error ||
+          (response.status === 404
             ? tr(lang, "এই QR/ID পাওয়া যায়নি।", "QR/ID not found.")
-            : response.status === 409
-            ? tr(
-                lang,
-                "এই নিবন্ধন অনুমোদিত নয়।",
-                "This registration is not approved."
-              )
             : response.status === 401
-            ? tr(
-                lang,
-                "সেশন শেষ। আবার লগইন করুন।",
-                "Session expired. Please log in again."
-              )
-            : tr(lang, "যাচাই করা যায়নি।", "Could not verify.")
+            ? tr(lang, "আবার Admin Login করুন।", "Please log in again.")
+            : tr(lang, "যাচাই করা যায়নি।", "Could not verify."))
         );
       }
 
       setLookup(parsed);
       setResult(data);
     } catch (err) {
-      setError(
-        err.message ||
-          tr(lang, "নেটওয়ার্ক সমস্যা।", "Network error.")
-      );
+      setError(err.message || tr(lang, "নেটওয়ার্ক সমস্যা।", "Network error."));
     } finally {
       setBusy(false);
     }
@@ -257,35 +217,21 @@ export default function CheckinScanner({ lang = "en" }) {
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-            data.message ||
-            tr(
-              lang,
-              "তথ্য সংরক্ষণ করা যায়নি।",
-              "Could not save the information."
-            )
+          data.error || data.message ||
+          tr(lang, "তথ্য সংরক্ষণ করা যায়নি।", "Could not save information.")
         );
       }
 
-      const updatedRegistration = {
-        ...reg,
-        ...(data.registration || {}),
-        [column]:
-          data.registration?.[column] ||
-          new Date().toISOString(),
-      };
-
       setResult({
         ...result,
-        registration: updatedRegistration,
-        already_attended:
-          !!updatedRegistration.attended_at,
+        registration: {
+          ...reg,
+          ...(data.registration || {}),
+          [column]: data.registration?.[column] || new Date().toISOString(),
+        },
       });
     } catch (err) {
-      setError(
-        err.message ||
-          tr(lang, "নেটওয়ার্ক সমস্যা।", "Network error.")
-      );
+      setError(err.message || tr(lang, "নেটওয়ার্ক সমস্যা।", "Network error."));
     } finally {
       setBusy(false);
     }
@@ -304,7 +250,6 @@ export default function CheckinScanner({ lang = "en" }) {
   function ActionStatus({ label, received, onClick, buttonText }) {
     return (
       <div
-        className="checkin-action"
         style={{
           display: "flex",
           alignItems: "center",
@@ -319,16 +264,14 @@ export default function CheckinScanner({ lang = "en" }) {
       >
         <div>
           <strong>{label}</strong>
-          <div
-            style={{
-              marginTop: "5px",
-              fontSize: "13px",
-              color: received ? "green" : "var(--muted, #777)",
-            }}
-          >
+          <div style={{
+            marginTop: "5px",
+            fontSize: "13px",
+            color: received ? "green" : "var(--muted, #777)",
+          }}>
             {received
-              ? tr(lang, "✓ গ্রহণ করা হয়েছে", "✓ Received")
-              : tr(lang, "এখনো গ্রহণ করা হয়নি", "Not received yet")}
+              ? tr(lang, "✓ সম্পন্ন হয়েছে", "✓ Completed")
+              : tr(lang, "এখনো Mark করা হয়নি", "Not marked yet")}
           </div>
         </div>
 
@@ -359,27 +302,14 @@ export default function CheckinScanner({ lang = "en" }) {
           <span className="eyebrow">
             {tr(lang, "অনুষ্ঠানের দিন", "EVENT DAY")}
           </span>
-
           <h2>
-            {tr(
-              lang,
-              "QR স্ক্যান ও ইভেন্ট ম্যানেজমেন্ট",
-              "QR Scan & Event Management"
-            )}
+            {tr(lang, "QR স্ক্যান ও ইভেন্ট ম্যানেজমেন্ট", "QR Scan & Event Management")}
           </h2>
-
           <p className="muted">
-            {tr(
-              lang,
-              "QR স্ক্যান করুন অথবা Registration ID লিখে Alumni-এর তথ্য যাচাই করুন।",
-              "Scan the QR or enter the Registration ID to verify alumni details."
-            )}
+            {tr(lang, "QR স্ক্যান করুন অথবা Registration ID লিখুন।", "Scan QR or enter Registration ID.")}
           </p>
         </div>
-
-        <span className="scanner-icon" aria-hidden="true">
-          ▦
-        </span>
+        <span className="scanner-icon" aria-hidden="true">▦</span>
       </div>
 
       {camera && (
@@ -411,11 +341,7 @@ export default function CheckinScanner({ lang = "en" }) {
         className="scanner-form"
       >
         <label htmlFor="qr-value">
-          {tr(
-            lang,
-            "রেজিস্ট্রেশন আইডি বা QR টোকেন",
-            "Registration ID or QR token"
-          )}
+          {tr(lang, "রেজিস্ট্রেশন আইডি বা QR টোকেন", "Registration ID or QR token")}
         </label>
 
         <input
@@ -429,10 +355,7 @@ export default function CheckinScanner({ lang = "en" }) {
         />
 
         <div className="row">
-          <button
-            className="btn"
-            disabled={busy || !value.trim()}
-          >
+          <button className="btn" disabled={busy || !value.trim()}>
             {busy
               ? tr(lang, "যাচাই হচ্ছে…", "Checking…")
               : tr(lang, "যাচাই করুন", "Verify")}
@@ -440,11 +363,7 @@ export default function CheckinScanner({ lang = "en" }) {
         </div>
       </form>
 
-      {error && (
-        <p className="error-panel" role="alert">
-          {error}
-        </p>
-      )}
+      {error && <p className="error-panel" role="alert">{error}</p>}
 
       {reg && (
         <div className="checkin-result" role="status">
@@ -452,64 +371,72 @@ export default function CheckinScanner({ lang = "en" }) {
             {tr(lang, "যাচাইকৃত নিবন্ধন", "Verified registration")}
           </span>
 
-          <h3>{reg.full_name}</h3>
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "16px",
+            flexWrap: "wrap",
+            marginTop: "16px",
+          }}>
+            {reg.photo_url ? (
+              <a href={reg.photo_url} target="_blank" rel="noreferrer">
+                <img
+                  src={reg.photo_url}
+                  alt={reg.full_name || "Alumni"}
+                  style={{
+                    width: "116px",
+                    height: "116px",
+                    objectFit: "cover",
+                    borderRadius: "12px",
+                    border: "1px solid var(--border, #ddd)",
+                  }}
+                />
+              </a>
+            ) : (
+              <div
+                className="avatar placeholder"
+                style={{ width: "116px", height: "116px", fontSize: "36px" }}
+              >
+                {Array.from(reg.full_name || "?")[0]}
+              </div>
+            )}
 
-          <p>
-            {tr(lang, "এসএসসি ব্যাচ", "SSC Batch")}:{" "}
-            {reg.ssc_batch}
-          </p>
-
-          <p>
-            {tr(lang, "পেশা", "Profession")}:{" "}
-            {reg.profession || "—"}
-          </p>
-
-          <p>
-            {tr(lang, "রেজিস্ট্রেশন আইডি", "Registration ID")}:{" "}
-            <b>{reg.reg_code}</b>
-          </p>
+            <div style={{ flex: "1", minWidth: "180px" }}>
+              <h3>{reg.full_name}</h3>
+              <p>{tr(lang, "এসএসসি ব্যাচ", "SSC Batch")}: {reg.ssc_batch}</p>
+              <p>{tr(lang, "পেশা", "Profession")}: {reg.profession || "—"}</p>
+              <p>
+                {tr(lang, "রেজিস্ট্রেশন আইডি", "Registration ID")}:{" "}
+                <b>{reg.reg_code || "—"}</b>
+              </p>
+            </div>
+          </div>
 
           <hr />
 
           <h3>
-            {tr(
-              lang,
-              "ইভেন্ট রিসিভিং ম্যানেজমেন্ট",
-              "Event Receiving Management"
-            )}
+            {tr(lang, "ইভেন্ট রিসিভিং ম্যানেজমেন্ট", "Event Receiving Management")}
           </h3>
 
           <ActionStatus
-            label={tr(lang, "১. Attendance", "1. Attendance")}
+            label="1. Attendance"
             received={!!reg.attended_at}
             onClick={() => markAction("attend")}
-            buttonText={tr(
-              lang,
-              "উপস্থিতি চিহ্নিত করুন",
-              "Mark Attendance"
-            )}
+            buttonText={tr(lang, "উপস্থিতি Mark করুন", "Mark Attendance")}
           />
 
           <ActionStatus
-            label={tr(lang, "২. Gift Received", "2. Gift Received")}
+            label="2. Gift Received"
             received={!!reg.gift_received_at}
             onClick={() => markAction("gift")}
-            buttonText={tr(
-              lang,
-              "Gift প্রদান করুন",
-              "Mark Gift Received"
-            )}
+            buttonText={tr(lang, "Gift Received Mark করুন", "Mark Gift Received")}
           />
 
           <ActionStatus
-            label={tr(lang, "৩. Food Received", "3. Food Received")}
+            label="3. Food Received"
             received={!!reg.food_received_at}
             onClick={() => markAction("food")}
-            buttonText={tr(
-              lang,
-              "Food প্রদান করুন",
-              "Mark Food Received"
-            )}
+            buttonText={tr(lang, "Food Received Mark করুন", "Mark Food Received")}
           />
 
           <div className="row" style={{ marginTop: "16px" }}>
