@@ -29,5 +29,5 @@ export default async function Page() {
   }
   // Only what the form needs is sent to the browser.
   const pay = { amount: s.amount ?? 0, methods: paymentMethods(s), note: localized(s, "payment_note", lang) };
-  return <><h1>{t(lang, "registration")}</h1><RegisterForm pay={pay} lang={lang} /></>;
+  return <><h1>{t(lang, "registration")}</h1><RegisterForm pay={pay} lang={lang} emailEnabled={s.email_field_enabled !== false} emailRequired={s.email_field_required !== false} tshirtEnabled={s.tshirt_field_enabled === true} tshirtRequired={s.tshirt_field_required === true} tshirtSizes={Array.isArray(s.tshirt_sizes) && s.tshirt_sizes.length ? s.tshirt_sizes : ["S","M","L","XL","XXL","XXXL"]} /></>;
 }

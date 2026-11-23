@@ -55,3 +55,22 @@ The footer credits Al Shahariar Dip (SSC Batch 2021, currently KUET ECE). School
 - **Privacy:** private phone numbers and storage paths are never sent to the browser by the public Alumni page. The QR token is returned by the status API only for approved registrations.
 - **Input normalisation:** Bangla digits (০-৯) and `+880…` phone formats are accepted and normalised on both client and server.
 - **Database setup:** `supabase/schema.sql` is idempotent. Re-run it after upgrading the site; the admin “System check” tab verifies tables, columns, permissions, the private bucket and the rate-limit function.
+
+
+## Main Admin / Sub Admin, audit and Recycle Bin
+
+- Main Admin password remains in the server-only `ADMIN_PASSWORD` environment variable.
+- Sub Admins are created from the Main Admin panel. Passwords are stored as salted scrypt hashes, never as plaintext.
+- Sub Admin sessions are checked against the database so deleting an account invalidates its next request.
+- Sub Admins can approve/reject registrations and use the QR scanner to mark attendance, gift and food.
+- Delete and unmark requests require the Main Admin password again. The password is sent only with that action and is not stored in the browser session.
+- Registration deletion moves the full record to `registration_trash`; the photo stays in storage until Main Admin permanently deletes it.
+- `activity_logs` is written server-side and there is no edit/delete control in the Admin UI.
+
+Run the updated `supabase/schema.sql` before using these features. Keep `ADMIN_PASSWORD` and `ADMIN_SECRET` in Vercel Environment Variables and never commit `.env.local`.
+
+## Automatic Gmail email
+
+Set `GMAIL_USER`, `GMAIL_APP_PASSWORD`, and `SITE_URL` in `.env.local` and Vercel. Gmail App Password requires Google 2-Step Verification. Use the App Password, not the normal account password. Registration emails include the assigned Registration Number, TrxID, and an ID-card link. The link opens the card after approval; an approval email is also sent. Admin → Email History shows attempts and allows retrying failed emails.
+
+The application logs whether SMTP accepted the message. SMTP acceptance does not guarantee inbox delivery; recipients should also check Spam/Junk. Gmail sending limits and account restrictions are controlled by Google.

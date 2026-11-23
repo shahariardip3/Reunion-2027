@@ -38,3 +38,35 @@
 
 ## ৬) নিরাপত্তা
 `.env.local` ব্যক্তিগত রাখুন। `service_role`/`sb_secret` key browser/client code-এ ব্যবহার করবেন না। Admin password বা secret কাউকে পাঠাবেন না।
+
+
+## স্বয়ংক্রিয় ইমেইল (নতুন)
+
+নিবন্ধন ফর্মে Email Field চালু থাকলে নিবন্ধনের পর স্বয়ংক্রিয় ইমেইলে Registration Number (REU-xxxx), TrxID এবং ID Card খোলার লিংক যাবে। নিবন্ধন Pending থাকলেও লিংকটি সংরক্ষণ করবেন; অ্যাডমিন অনুমোদন করার পর একই লিংক থেকে ID Card দেখা/প্রিন্ট/PDF হিসেবে সংরক্ষণ করা যাবে। অনুমোদনের পর দ্বিতীয় ইমেইলও যাবে।
+
+1. Google Account-এ 2-Step Verification চালু করুন।
+2. Google Account → Security → App passwords থেকে একটি App Password তৈরি করুন।
+3. `.env.local` এবং Vercel → Project → Settings → Environment Variables-এ যোগ করুন:
+   - `GMAIL_USER` = Gmail ঠিকানা
+   - `GMAIL_APP_PASSWORD` = ১৬ অক্ষরের App Password
+   - `SITE_URL` = সম্পূর্ণ live website URL, যেমন `https://your-site.vercel.app`
+   - `SMTP_HOST=smtp.gmail.com`
+   - `SMTP_PORT=465`
+4. Vercel-এ Redeploy করুন।
+5. Supabase SQL Editor-এ নতুন `supabase/schema.sql` পুরোটা Run করুন।
+
+Admin → Settings → Registration থেকে Email Field চালু/বন্ধ এবং Required/Optional করা যাবে। Admin → Email History-তে পাঠানোর অবস্থা দেখা যাবে এবং ব্যর্থ ইমেইল আবার পাঠানো যাবে।
+
+**গুরুত্বপূর্ণ:** `.env.local` কখনো ZIP/GitHub-এ দেবেন না। Gmail-এর স্বাভাবিক পাসওয়ার্ড নয়, App Password ব্যবহার করবেন। Gmail/SMTP সার্ভার ইমেইল গ্রহণ করেছে মানেই প্রাপকের Inbox-এ পৌঁছেছে—এ নিশ্চয়তা নয়; Spam/Junk ফোল্ডারও পরীক্ষা করতে বলবেন।
+
+
+## নতুন Admin System
+
+- Login পেজে Main Admin অথবা Sub Admin নির্বাচন করুন।
+- Main Admin: `.env.local` / Vercel Environment Variables-এর `ADMIN_PASSWORD`।
+- Main Admin Panel → Sub Admins থেকে সর্বোচ্চ ৫টি Sub Admin তৈরি করুন। Username ও Password দিন; Password database-এ salted hash হিসেবে থাকবে।
+- Sub Admin শুধু Registration approve/reject এবং QR Scanner থেকে attendance/gift/food mark করতে পারবে।
+- Delete বা unmark করতে Main Admin Password আবার দিতে হবে।
+- Delete করা registration Recycle Bin-এ থাকবে। Restore বা Permanent Delete Main Admin করতে পারবে।
+- Activity Log-এ Admin-এর নাম, action এবং সময় দেখা যাবে।
+- T-shirt Size Field Main Admin Settings থেকে চালু/বন্ধ, required/optional এবং size options পরিবর্তন করা যাবে।

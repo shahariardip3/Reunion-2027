@@ -1,10 +1,10 @@
 import { db } from "../../../../lib/supabase";
-import { isAdmin } from "../../../../lib/auth";
+import { isMainAdmin } from "../../../../lib/auth";
 
 export async function GET() {
-  if (!(await isAdmin())) return new Response("Unauthorized", { status: 401 });
+  if (!(await isMainAdmin())) return new Response("Unauthorized", { status: 401 });
   const { data } = await db().from("registrations").select("*").order("created_at");
-  const cols = ["reg_code", "full_name", "ssc_batch", "profession", "phone", "phone_public", "pay_method", "trx_id", "status", "attended_at", "created_at"];
+  const cols = ["reg_code", "full_name", "ssc_batch", "profession", "phone", "email", "tshirt_size", "phone_public", "pay_method", "trx_id", "status", "attended_at", "created_at"];
   const esc = (v) => {
     let t = String(v ?? "");
     if (/^[=+\-@]/.test(t)) t = "'" + t;

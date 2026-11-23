@@ -6,6 +6,7 @@ import { normalizeDigits, normalizePhone, normalizeTrx, PHONE_RE, TRX_RE } from 
 
 const SERVER_ERRORS = {
   "Transaction ID and registered phone number are required.": "statusMissing",
+  "Transaction ID and registration number (or registered phone number) are required.": "statusMissing",
   "No registration found with those details.": "statusNoMatch",
   "Could not check status. Try again.": "statusFail",
 };

@@ -7,7 +7,7 @@ import { normalizeDigits, normalizePhone, normalizeTrx, PHONE_RE, TRX_RE } from 
 
 const MAX = 220 * 1024;
 const DRAFT_KEY = "reunion_reg_draft";
-const EMPTY = { full_name: "", ssc_batch: "", profession: "", phone: "", trx_id: "" };
+const EMPTY = { full_name: "", ssc_batch: "", profession: "", phone: "", email: "", tshirt_size: "", trx_id: "" };
 
 /* ---------- photo helpers ---------- */
 async function decodeImage(file) {
@@ -61,6 +61,10 @@ const SERVER_ERRORS = {
   "The uploaded file is not a valid image.": "invalidImage",
   "This transaction ID has already been used.": "duplicateTrx",
   "Registration is closed.": "registrationClosed",
+  "Email address is required.": "requiredEmail",
+  "Enter a valid email address.": "invalidEmail",
+  "T-shirt size is required.": "requiredTshirt",
+  "Invalid T-shirt size.": "invalidTshirt",
 };
 const SERVER_ERRORS_TR = {
   "Payment information has not been set up yet.": ["পেমেন্টের তথ্য এখনো যোগ করা হয়নি। অ্যাডমিনকে জানান।", "Payment details have not been set up yet. Please tell the admin."],
@@ -94,7 +98,7 @@ function CopyField({ label, value, lang, big }) {
 
 const methodLabel = (id, lang) => (id === "bank" ? tr(lang, "ব্যাংক", "Bank") : id === "nagad" ? "Nagad" : "bKash");
 
-export default function RegisterForm({ pay, lang = "bn" }) {
+export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, emailRequired = true, tshirtEnabled = false, tshirtRequired = false, tshirtSizes = ["S","M","L","XL","XXL","XXXL"] }) {
   const methods = pay.methods || [];
   const [step, setStep] = useState(1);
   const [form, setForm] = useState(EMPTY);
@@ -151,6 +155,8 @@ export default function RegisterForm({ pay, lang = "bn" }) {
     ssc_batch: normalizeDigits(form.ssc_batch).trim(),
     profession: form.profession.normalize("NFC").trim(),
     phone: normalizePhone(form.phone),
+    email: emailEnabled ? form.email.trim().toLowerCase() : "",
+    tshirt_size: tshirtEnabled ? form.tshirt_size : "",
     trx_id: normalizeTrx(form.trx_id),
   });
 
@@ -160,6 +166,10 @@ export default function RegisterForm({ pay, lang = "bn" }) {
     if (!/^\d{4}$/.test(v.ssc_batch) || +v.ssc_batch < 1940 || +v.ssc_batch > year) return bad("ssc_batch", "invalidBatch");
     if (v.profession.length < 2 || v.profession.length > 100 || /[<>]/.test(v.profession)) return bad("profession", "invalidProfession");
     if (!PHONE_RE.test(v.phone)) return bad("phone", "invalidPhone");
+    if (emailEnabled && emailRequired && !v.email) return bad("email", "requiredEmail");
+    if (emailEnabled && v.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.email)) return bad("email", "invalidEmail");
+    if (tshirtEnabled && tshirtRequired && !v.tshirt_size) return bad("tshirt_size", "requiredTshirt");
+    if (tshirtEnabled && v.tshirt_size && !tshirtSizes.includes(v.tshirt_size)) return bad("tshirt_size", "invalidTshirt");
     if (!photo) return bad("photo", "choosePhoto");
     return true;
   }
@@ -193,7 +203,7 @@ export default function RegisterForm({ pay, lang = "bn" }) {
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setErr(serverError(lang, r.status, j)); return; }
       try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
-      setDone({ trx: v.trx_id });
+      setDone({ trx: v.trx_id, regCode: j.reg_code, emailSent: j.email_sent === true, emailSkipped: j.email_skipped === true });
       top();
     } catch { setErr(t(lang, "networkError")); }
     finally { setBusy(false); }
@@ -205,7 +215,13 @@ export default function RegisterForm({ pay, lang = "bn" }) {
         <div className="state-icon ok" aria-hidden="true">✓</div>
         <h2>{t(lang, "sent")}</h2>
         <p>{t(lang, "sentNote")}</p>
+        <div className="status-reference"><span>{tr(lang, "নিবন্ধন নম্বর", "Registration Number")}</span><b>{done.regCode || "—"}</b></div>
         <div className="status-reference"><span>TrxID</span><b>{done.trx}</b></div>
+        {emailEnabled && <p className="muted">{done.emailSkipped
+          ? tr(lang, "ইমেইল ঠিকানা দেওয়া হয়নি, তাই ইমেইল পাঠানো হয়নি।", "No email address was provided, so no email was sent.")
+          : done.emailSent
+            ? tr(lang, "নিবন্ধনের তথ্য ও ID Card ডাউনলোড লিংক আপনার ইমেইলে পাঠানো হয়েছে। অনুমোদনের পর একই লিংক থেকে কার্ড ডাউনলোড করতে পারবেন।", "Registration details and your ID-card link have been emailed to you. After approval, use the same link to download the card.")
+            : tr(lang, "ইমেইল পাঠানো যায়নি। আপনার নিবন্ধন সংরক্ষিত হয়েছে—নম্বর ও TrxID সংরক্ষণ করুন এবং ইমেইল ঠিকানা পরীক্ষা করুন।", "The email could not be sent. Your registration is saved—keep your registration number and transaction ID.")}</p>}
         <p className="muted">{tr(lang, "আপনার TrxID ও নিবন্ধিত ফোন নম্বর সংরক্ষণ করে রাখুন — স্ট্যাটাস দেখতে দুটোই লাগবে।", "Keep your TrxID and registered phone number — you need both to check your status.")}</p>
         <div className="row" style={{ justifyContent: "center" }}><Link className="btn" href="/status">{t(lang, "checkStatus")}</Link></div>
       </div>
@@ -239,6 +255,19 @@ export default function RegisterForm({ pay, lang = "bn" }) {
 
           <label htmlFor="phone">{t(lang, "mobile")}</label>
           <input id="phone" name="phone" type="tel" autoComplete="tel" required inputMode="numeric" maxLength={16} placeholder="017XXXXXXXX" value={form.phone} onChange={set("phone", normalizeDigits)} />
+
+          {emailEnabled && <>
+            <label htmlFor="email">{tr(lang, "ইমেইল ঠিকানা", "Email address")} {emailRequired ? "*" : tr(lang, "(ঐচ্ছিক)", "(optional)")}</label>
+            <input id="email" name="email" type="email" autoComplete="email" maxLength={254} required={emailRequired} value={form.email} onChange={set("email")} placeholder="name@example.com" />
+          </>}
+
+          {tshirtEnabled && <>
+            <label htmlFor="tshirt_size">{tr(lang, "T-shirt Size", "T-shirt Size")} {tshirtRequired ? "*" : tr(lang, "(ঐচ্ছিক)", "(optional)")}</label>
+            <select id="tshirt_size" name="tshirt_size" value={form.tshirt_size} required={tshirtRequired} onChange={set("tshirt_size")}>
+              <option value="">{tr(lang, "সাইজ নির্বাচন করুন", "Select size")}</option>
+              {tshirtSizes.map(size => <option key={size} value={size}>{size}</option>)}
+            </select>
+          </>}
 
           <label htmlFor="photo">{t(lang, "photo")}</label>
           <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPhoto} />

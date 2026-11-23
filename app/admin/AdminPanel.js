@@ -9,12 +9,18 @@ import CheckinScanner from "./CheckinScanner";
 import NoticesTab from "./NoticesTab";
 import SettingsTab from "./SettingsTab";
 import DiagnosticsTab from "./DiagnosticsTab";
+import EmailHistoryTab from "./EmailHistoryTab";
+import SubAdminsTab from "./SubAdminsTab";
+import RecycleBinTab from "./RecycleBinTab";
+import ActivityLogTab from "./ActivityLogTab";
 
 export default function AdminPanel({
   settings,
   regs = [],
   lang = "en",
   notices = [],
+  role = "main",
+  adminName = "Admin",
 }) {
   const router = useRouter();
   const [tab, setTab] = useState("registrations");
@@ -45,36 +51,22 @@ export default function AdminPanel({
 
   const amount = Number(settings.amount) || 0;
 
-  // Admin navigation tabs
+  // Sub Admins only receive registration approval and QR scanning tools.
   const tabs = [
-    [
-      "registrations",
-      tr(lang, "নিবন্ধন", "Registrations"),
-      pending,
-    ],
-    [
-      "checkin",
-      tr(lang, "QR চেক-ইন", "QR Check-in"),
-      0,
-    ],
-    [
-      "notices",
-      t(lang, "notice"),
-      0,
-    ],
-    [
-      "settings",
-      tr(lang, "সেটিংস", "Settings"),
-      0,
-    ],
-    [
-      "system",
-      tr(lang, "সিস্টেম চেক", "System check"),
-      0,
-    ],
+    ["registrations", tr(lang, "নিবন্ধন", "Registrations"), pending],
+    ["checkin", tr(lang, "QR চেক-ইন", "QR Check-in"), 0],
+    ...(role === "main" ? [
+      ["notices", t(lang, "notice"), 0],
+      ["settings", tr(lang, "সেটিংস", "Settings"), 0],
+      ["email", tr(lang, "ইমেইল ইতিহাস", "Email History"), 0],
+      ["subadmins", tr(lang, "Sub Admins", "Sub Admins"), 0],
+      ["recycle", tr(lang, "Recycle Bin", "Recycle Bin"), 0],
+      ["activity", tr(lang, "Activity Log", "Activity Log"), 0],
+      ["system", tr(lang, "সিস্টেম চেক", "System check"), 0],
+    ] : []),
   ];
 
-  // Dashboard statistics
+    // Dashboard statistics
   const stats = [
     [
       nf.format(regs.length),
@@ -124,7 +116,7 @@ export default function AdminPanel({
     <>
       {/* Admin Header */}
       <div className="admin-heading">
-        <h1>{t(lang, "adminPanel")}</h1>
+        <div><h1>{t(lang, "adminPanel")}</h1><small className="muted">{adminName} · {role === "main" ? "Main Admin" : "Sub Admin"}</small></div>
 
         <button
           type="button"
@@ -186,6 +178,7 @@ export default function AdminPanel({
           <RegistrationsTab
             regs={regs}
             lang={lang}
+            role={role}
           />
         )}
 
@@ -193,23 +186,25 @@ export default function AdminPanel({
           <CheckinScanner lang={lang} />
         )}
 
-        {tab === "notices" && (
+        {role === "main" && tab === "notices" && (
           <NoticesTab
             notices={notices}
             lang={lang}
           />
         )}
 
-        {tab === "settings" && (
+        {role === "main" && tab === "settings" && (
           <SettingsTab
             settings={settings}
             lang={lang}
           />
         )}
 
-        {tab === "system" && (
-          <DiagnosticsTab lang={lang} />
-        )}
+        {role === "main" && tab === "email" && <EmailHistoryTab lang={lang} />}
+        {role === "main" && tab === "subadmins" && <SubAdminsTab lang={lang} />}
+        {role === "main" && tab === "recycle" && <RecycleBinTab lang={lang} />}
+        {role === "main" && tab === "activity" && <ActivityLogTab lang={lang} />}
+        {role === "main" && tab === "system" && <DiagnosticsTab lang={lang} />}
       </div>
     </>
   );

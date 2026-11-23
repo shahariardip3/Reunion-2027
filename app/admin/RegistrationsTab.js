@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { t, tr } from "../../lib/i18n";
 import { send, failText } from "./api";
 
-export default function RegistrationsTab({ regs, lang = "en" }) {
+export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
   const router = useRouter();
 
   const [filter, setFilter] = useState("pending");
@@ -47,8 +47,12 @@ export default function RegistrationsTab({ regs, lang = "en" }) {
   }), [regs, filter, term]);
 
   async function act(r, action, value) {
-    if (action === "delete" && !confirm(t(lang, "confirmDelete"))) {
-      return;
+    if (action === "delete" && !confirm(t(lang, "confirmDelete"))) return;
+    let mainPassword = "";
+    const restricted = action === "delete" || (["attended", "gift_received", "food_received"].includes(action) && value === false);
+    if (restricted) {
+      mainPassword = window.prompt(tr(lang, "এই কাজের জন্য Main Admin Password দিন:", "Enter Main Admin password to authorize this action:")) || "";
+      if (!mainPassword) return;
     }
 
     if (
@@ -71,11 +75,15 @@ export default function RegistrationsTab({ regs, lang = "en" }) {
       id: r.id,
       action,
       value,
+      main_password: mainPassword,
     });
 
     setBusyId("");
 
     if (res.ok) {
+      if (action === "approve" && r.email && res.data?.email_sent === false) {
+        setMsg({ type: "error", text: tr(lang, "নিবন্ধন অনুমোদিত হয়েছে, কিন্তু Approval Email পাঠানো যায়নি। Email History দেখুন।", "Registration approved, but the approval email could not be sent. Check Email History.") });
+      }
       router.refresh();
       return;
     }
@@ -120,9 +128,9 @@ export default function RegistrationsTab({ regs, lang = "en" }) {
           onChange={(e) => setQ(e.target.value)}
         />
 
-        <a className="btn ghost" href="/api/admin/export" download>
+        {role === "main" && <a className="btn ghost" href="/api/admin/export" download>
           {t(lang, "download")}
-        </a>
+        </a>}
       </div>
 
       <div className="tabs" role="group" aria-label={t(lang, "registrations")}>
@@ -201,6 +209,8 @@ export default function RegistrationsTab({ regs, lang = "en" }) {
                     <a href={"tel:" + r.phone}>{r.phone}</a>
                   </span>
                 )}
+                {r.email && <span>Email: <a href={"mailto:" + r.email}>{r.email}</a></span>}
+                {r.tshirt_size && <span>T-shirt: <b>{r.tshirt_size}</b></span>}
 
                 <span>
                   {t(lang, "transactionLabel")}: <b>{r.trx_id}</b>
@@ -269,7 +279,7 @@ export default function RegistrationsTab({ regs, lang = "en" }) {
                   </button>
                 )}
 
-                {r.status !== "pending" && (
+                {role === "main" && r.status !== "pending" && (
                   <button
                     type="button"
                     className="btn ghost small"
@@ -340,14 +350,14 @@ export default function RegistrationsTab({ regs, lang = "en" }) {
                   </>
                 )}
 
-                <button
+                {role === "main" && <button
                   type="button"
                   className="btn ghost small danger-text"
                   disabled={busy}
                   onClick={() => act(r, "delete")}
                 >
                   {t(lang, "delete")}
-                </button>
+                </button>}
               </div>
             </div>
           </article>

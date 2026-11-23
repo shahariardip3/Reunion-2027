@@ -1,5 +1,6 @@
 import { db } from "../../../../lib/supabase";
-import { isAdmin } from "../../../../lib/auth";
+import { isMainAdmin } from "../../../../lib/auth";
+import { writeAudit } from "../../../../lib/audit-log";
 import { csrfGuard, rateLimit } from "../../../../lib/security";
 import { fail, json, dbFail, isMissingColumn } from "../../../../lib/http";
 
@@ -15,7 +16,7 @@ function isFacebook(url) {
 }
 
 export async function POST(req) {
-  if (!(await isAdmin())) return fail("Unauthorized", 401);
+  if (!(await isMainAdmin())) return fail("Unauthorized", 401);
   const csrf = csrfGuard(req); if (csrf) return csrf;
   const limited = await rateLimit(req, "admin-write", 60, 60); if (limited) return limited;
   const b = await req.json().catch(() => null);
@@ -24,7 +25,14 @@ export async function POST(req) {
   const amount = Number(b.amount === "" || b.amount == null ? 0 : b.amount);
   if (!Number.isInteger(amount) || amount < 0 || amount > 1_000_000) return fail("Invalid amount.");
 
-  const row = { id: 1, amount, show_public: b.show_public === true, registration_open: b.registration_open !== false };
+  const sizes = Array.isArray(b.tshirt_sizes) ? b.tshirt_sizes.map((v) => String(v).trim().toUpperCase()).filter(Boolean) : [];
+  if (sizes.length > 20 || sizes.some((v) => !/^[A-Z0-9-]{1,12}$/.test(v)) || new Set(sizes).size !== sizes.length) return fail("Invalid T-shirt size options.");
+  const row = {
+    id: 1, amount, show_public: b.show_public === true, registration_open: b.registration_open !== false,
+    email_field_enabled: b.email_field_enabled !== false, email_field_required: b.email_field_enabled !== false && b.email_field_required !== false,
+    tshirt_field_enabled: b.tshirt_field_enabled === true, tshirt_field_required: b.tshirt_field_enabled === true && b.tshirt_field_required === true,
+    tshirt_sizes: sizes.length ? sizes : ["S","M","L","XL","XXL","XXXL"],
+  };
   for (const key of [...SHORT, ...LONG]) {
     const value = typeof b[key] === "string" ? b[key].trim() : "";
     if (value.length > (LONG.includes(key) ? 1000 : 160)) return fail(`Field "${key}" is too long.`);
@@ -48,5 +56,6 @@ export async function POST(req) {
       : "Could not save settings.";
     return dbFail("settings", msg, error, { admin: true });
   }
+  await writeAudit("settings_updated", null, { email_field_enabled: row.email_field_enabled, tshirt_field_enabled: row.tshirt_field_enabled });
   return json({ ok: true });
 }

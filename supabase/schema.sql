@@ -34,6 +34,11 @@ alter table public.settings add column if not exists payment_note_bn text;
 alter table public.settings add column if not exists payment_note_en text;
 alter table public.settings add column if not exists facebook_page_url text;
 alter table public.settings add column if not exists registration_open boolean not null default true;
+alter table public.settings add column if not exists email_field_enabled boolean not null default true;
+alter table public.settings add column if not exists email_field_required boolean not null default true;
+alter table public.settings add column if not exists tshirt_field_enabled boolean not null default false;
+alter table public.settings add column if not exists tshirt_field_required boolean not null default false;
+alter table public.settings add column if not exists tshirt_sizes text[] not null default array['S','M','L','XL','XXL','XXXL'];
 
 -- Payment channels
 alter table public.settings add column if not exists bkash_number text default '';
@@ -176,7 +181,56 @@ create index if not exists notices_public_order_idx
 on public.notices (published, pinned desc, created_at desc);
 
 
--- ---------- 4. Rate limiting ----------
+-- ---------- 4. Email delivery history ----------
+create table if not exists public.email_logs (
+  id uuid primary key default gen_random_uuid(),
+  registration_id uuid references public.registrations(id) on delete set null,
+  recipient text not null,
+  email_type text not null check (email_type in ('registered','approved')),
+  subject text not null,
+  status text not null default 'sending' check (status in ('sending','sent','failed')),
+  error_message text,
+  created_at timestamptz not null default now(),
+  sent_at timestamptz
+);
+create index if not exists email_logs_created_idx on public.email_logs (created_at desc);
+create index if not exists email_logs_registration_idx on public.email_logs (registration_id);
+
+-- ---------- 5. Admin accounts, audit history and recycle bin ----------
+create table if not exists public.admin_users (
+  id uuid primary key default gen_random_uuid(),
+  username text not null unique check (username ~ '^[a-z0-9_.-]{3,32}$'),
+  display_name text not null check (char_length(display_name) between 2 and 80),
+  password_hash text not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+create index if not exists admin_users_active_idx on public.admin_users (is_active);
+
+create table if not exists public.activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  admin_username text not null,
+  admin_name text not null,
+  admin_role text not null check (admin_role in ('main','sub')),
+  action text not null,
+  registration_id uuid,
+  registration_name text,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+create index if not exists activity_logs_created_idx on public.activity_logs (created_at desc);
+create index if not exists activity_logs_registration_idx on public.activity_logs (registration_id);
+
+create table if not exists public.registration_trash (
+  id uuid primary key default gen_random_uuid(),
+  original_id uuid not null,
+  registration_data jsonb not null,
+  deleted_by text not null,
+  deleted_at timestamptz not null default now()
+);
+create index if not exists registration_trash_deleted_idx on public.registration_trash (deleted_at desc);
+
+-- ---------- 6. Rate limiting ----------
 create table if not exists public.security_rate_limits (
   key_hash text primary key,
   window_start timestamptz not null,
@@ -190,15 +244,46 @@ alter table public.settings enable row level security;
 alter table public.registrations enable row level security;
 alter table public.notices enable row level security;
 alter table public.security_rate_limits enable row level security;
+alter table public.email_logs enable row level security;
+alter table public.admin_users enable row level security;
+alter table public.activity_logs enable row level security;
+alter table public.registration_trash enable row level security;
 
 revoke all on public.settings from anon, authenticated;
 revoke all on public.registrations from anon, authenticated;
 revoke all on public.notices from anon, authenticated;
 revoke all on public.security_rate_limits from anon, authenticated;
+revoke all on public.email_logs from anon, authenticated;
+revoke all on public.admin_users from anon, authenticated;
+revoke all on public.activity_logs from anon, authenticated;
+revoke all on public.registration_trash from anon, authenticated;
 
 
 -- ---------- 6. Registration ID generator ----------
 create sequence if not exists public.reg_seq start 1;
+
+-- Keep the sequence ahead of all active and soft-deleted registration numbers.
+do $$
+declare
+  max_code bigint;
+  seq_value bigint;
+  seq_called boolean;
+begin
+  select max(substring(code from '^REU-([0-9]+)$')::bigint)
+    into max_code
+  from (
+    select reg_code as code from public.registrations
+    union all
+    select registration_data->>'reg_code' as code from public.registration_trash
+  ) all_codes
+  where code ~ '^REU-[0-9]+$';
+
+  select last_value, is_called into seq_value, seq_called from public.reg_seq;
+  if max_code is not null and (not seq_called or seq_value < max_code) then
+    perform setval('public.reg_seq', max_code, true);
+  end if;
+end;
+$$;
 
 create or replace function public.approve_registration(p_id uuid)
 returns text
@@ -230,7 +315,47 @@ end;
 $$;
 
 
--- ---------- 7. Rate limit function ----------
+-- ---------- 7. Registration number allocator ----------
+create or replace function public.next_registration_code()
+returns text
+language sql
+security definer
+set search_path = public, pg_temp
+as $$
+  select 'REU-' || lpad(nextval('public.reg_seq')::text, 4, '0');
+$$;
+
+revoke all on function public.next_registration_code() from public, anon, authenticated;
+grant execute on function public.next_registration_code() to service_role;
+
+-- ---------- 8. Safe Sub Admin account creation (maximum 5) ----------
+create or replace function public.create_subadmin(
+  p_username text,
+  p_display_name text,
+  p_password_hash text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  new_id uuid;
+begin
+  perform pg_advisory_xact_lock(hashtext('reunion2027_subadmin_limit')::bigint);
+  if (select count(*) from public.admin_users) >= 5 then
+    raise exception 'MAX_SUBADMINS';
+  end if;
+  insert into public.admin_users(username, display_name, password_hash, is_active)
+  values (p_username, p_display_name, p_password_hash, true)
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+revoke all on function public.create_subadmin(text,text,text) from public, anon, authenticated;
+grant execute on function public.create_subadmin(text,text,text) to service_role;
+
+-- ---------- 9. Rate limit function ----------
 create or replace function public.consume_rate_limit(
   p_key_hash text,
   p_limit integer,

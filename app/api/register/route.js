@@ -1,9 +1,10 @@
 import crypto from "crypto";
 import { db } from "../../../lib/supabase";
 import { csrfGuard, rateLimit, validImageSignature } from "../../../lib/security";
-import { fail, json, dbFail, isMissingColumn } from "../../../lib/http";
+import { fail, json, dbFail } from "../../../lib/http";
 import { normalizeDigits, normalizePhone, normalizeTrx, PHONE_RE, TRX_RE } from "../../../lib/format";
 import { paymentMethods } from "../../../lib/settings";
+import { sendRegistrationEmail } from "../../../lib/email";
 
 export const runtime = "nodejs";
 const MAX = 220 * 1024;
@@ -22,6 +23,8 @@ export async function POST(req) {
   const batch = normalizeDigits(text(fd.get("ssc_batch")));
   const phone = normalizePhone(text(fd.get("phone")));
   const profession = text(fd.get("profession"));
+  const email = text(fd.get("email")).toLowerCase();
+  const tshirtSize = text(fd.get("tshirt_size")).toUpperCase();
   const trx = normalizeTrx(text(fd.get("trx_id")));
   const method = text(fd.get("pay_method")) || "bkash";
   const photo = fd.get("photo");
@@ -31,6 +34,7 @@ export async function POST(req) {
   if (!PHONE_RE.test(phone)) return fail("Enter a valid Bangladesh mobile number.");
   if (profession.length < 2 || profession.length > 100 || /[<>\u0000-\u001f]/.test(profession)) return fail("Enter a valid present profession.");
   if (!TRX_RE.test(trx)) return fail("Enter a valid transaction ID.");
+  if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) return fail("Enter a valid email address.");
   if (!photo || typeof photo === "string") return fail("Photo is required.");
   if (photo.size < 16 || photo.size > MAX) return fail("Photo must be under 220 KB.");
   const ext = EXT[photo.type];
@@ -42,6 +46,16 @@ export async function POST(req) {
   const { data: st, error: stError } = await sb.from("settings").select("*").eq("id", 1).maybeSingle();
   if (stError) return dbFail("register:settings", "Could not read settings.", stError, { status: 503 });
   if (st && st.registration_open === false) return fail("Registration is closed.", 403);
+  const emailEnabled = st?.email_field_enabled !== false;
+  const emailRequired = st?.email_field_required !== false;
+  if (emailEnabled && emailRequired && !email) return fail("Email address is required.");
+  if (!emailEnabled && email) return fail("Email field is currently disabled.");
+  const tshirtEnabled = st?.tshirt_field_enabled === true;
+  const tshirtRequired = st?.tshirt_field_required === true;
+  const tshirtSizes = Array.isArray(st?.tshirt_sizes) && st.tshirt_sizes.length ? st.tshirt_sizes : ["S","M","L","XL","XXL","XXXL"];
+  if (tshirtEnabled && tshirtRequired && !tshirtSize) return fail("T-shirt size is required.");
+  if (tshirtEnabled && tshirtSize && !tshirtSizes.includes(tshirtSize)) return fail("Invalid T-shirt size.");
+  if (!tshirtEnabled && tshirtSize) return fail("T-shirt size field is currently disabled.");
   const methods = paymentMethods(st || {});
   if (!methods.length) return fail("Payment information has not been set up yet.", 503);
   if (!methods.some((m) => m.id === method)) return fail("Invalid payment method.");
@@ -50,20 +64,32 @@ export async function POST(req) {
   if (dupError) return dbFail("register:lookup", "Could not validate transaction ID. Try again.", dupError, { status: 503 });
   if (dup) return fail("This transaction ID has already been used.", 409);
 
-  const path = `${crypto.randomUUID()}.${ext}`;
-  const up = await sb.storage.from("photos").upload(path, bytes, { contentType: photo.type, upsert: false });
+  const { data: regCode, error: codeError } = await sb.rpc("next_registration_code");
+  if (codeError || typeof regCode !== "string" || !/^REU-\d{4,}$/.test(regCode)) {
+    return dbFail("register:code", "Could not generate registration number. Run the latest supabase/schema.sql.", codeError || new Error("Invalid registration code"), { status: 503 });
+  }
+
+  const photoPath = `${crypto.randomUUID()}.${ext}`;
+  const up = await sb.storage.from("photos").upload(photoPath, bytes, { contentType: photo.type, upsert: false });
   if (up.error) return dbFail("register:upload", "Photo upload failed. Try again.", up.error);
 
-  const row = { full_name: name, ssc_batch: batch, phone, profession, photo_path: path, trx_id: trx, pay_method: method };
-  let { error } = await sb.from("registrations").insert(row);
-  if (isMissingColumn(error)) {            // database not upgraded yet: still accept the registration
-    const { pay_method, ...legacy } = row;
-    ({ error } = await sb.from("registrations").insert(legacy));
-  }
+  const row = {
+    full_name: name, ssc_batch: batch, phone, email: emailEnabled ? (email || null) : null,
+    tshirt_size: tshirtEnabled ? (tshirtSize || null) : null,
+    profession, photo_path: photoPath, trx_id: trx, pay_method: method, reg_code: regCode,
+  };
+  const { data: inserted, error } = await sb.from("registrations").insert(row).select("*").single();
   if (error) {
-    await sb.storage.from("photos").remove([path]);
-    if (error.code === "23505") return fail("This transaction ID has already been used.", 409);
-    return dbFail("register:insert", "Registration could not be saved.", error);
+    await sb.storage.from("photos").remove([photoPath]);
+    if (error.code === "23505") return fail("This transaction ID or registration number has already been used.", 409);
+    return dbFail("register:insert", "Registration could not be saved. Run the latest supabase/schema.sql.", error);
   }
-  return json({ ok: true });
+
+  let emailSent = false;
+  let emailSkipped = !email;
+  if (email) {
+    const mail = await sendRegistrationEmail(inserted);
+    emailSent = mail.sent === true;
+  }
+  return json({ ok: true, reg_code: regCode, email_sent: emailSent, email_skipped: emailSkipped });
 }

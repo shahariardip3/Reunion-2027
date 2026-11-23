@@ -32,6 +32,16 @@ export default function SettingsTab({ settings, lang = "en" }) {
         <legend>{tr(lang, "নিবন্ধন", "Registration")}</legend>
         <label className="check"><input type="checkbox" checked={s.registration_open !== false} onChange={(e) => setS({ ...s, registration_open: e.target.checked })} /> {tr(lang, "নতুন নিবন্ধন গ্রহণ চালু রাখুন", "Accept new registrations")}</label>
         <label className="check"><input type="checkbox" checked={!!s.show_public} onChange={(e) => setS({ ...s, show_public: e.target.checked })} /> {t(lang, "publicAlumni")}</label>
+        <hr />
+        <label className="check"><input type="checkbox" checked={s.email_field_enabled !== false} onChange={(e) => setS({ ...s, email_field_enabled: e.target.checked, email_field_required: e.target.checked ? (s.email_field_enabled === false ? true : s.email_field_required !== false) : false })} /> {tr(lang, "নিবন্ধন ফর্মে Email Field দেখান", "Show email field in registration form")}</label>
+        <label className="check"><input type="checkbox" disabled={s.email_field_enabled === false} checked={s.email_field_required !== false && s.email_field_enabled !== false} onChange={(e) => setS({ ...s, email_field_required: e.target.checked })} /> {tr(lang, "Email Field বাধ্যতামূলক করুন", "Make email field required")}</label>
+        <small className="hint">{tr(lang, "Email চালু থাকলে নিবন্ধনের পর Registration Number ও TrxID-সহ ইমেইল যাবে। অনুমোদনের পর ID Card ডাউনলোডের ইমেইলও যাবে।", "When enabled, registrants receive their Registration Number and TrxID by email, followed by another email after approval with the ID-card link.")}</small>
+        <hr />
+        <label className="check"><input type="checkbox" checked={s.tshirt_field_enabled === true} onChange={(e) => setS({ ...s, tshirt_field_enabled: e.target.checked, tshirt_field_required: e.target.checked && s.tshirt_field_required === true })} /> {tr(lang, "নিবন্ধন ফর্মে T-shirt Size Field দেখান", "Show T-shirt size field in registration form")}</label>
+        <label className="check"><input type="checkbox" disabled={s.tshirt_field_enabled !== true} checked={s.tshirt_field_enabled === true && s.tshirt_field_required === true} onChange={(e) => setS({ ...s, tshirt_field_required: e.target.checked })} /> {tr(lang, "T-shirt Size বাধ্যতামূলক করুন", "Make T-shirt size required")}</label>
+        <label>{tr(lang, "T-shirt Size Options (কমা দিয়ে আলাদা করুন)", "T-shirt size options (comma-separated)")}</label>
+        <input value={Array.isArray(s.tshirt_sizes) ? s.tshirt_sizes.join(", ") : "S, M, L, XL, XXL, XXXL"} onChange={(e) => setS({ ...s, tshirt_sizes: e.target.value.split(",").map(v => v.trim().toUpperCase()).filter(Boolean) })} placeholder="S, M, L, XL, XXL, XXXL" />
+        <small className="hint">{tr(lang, "উদাহরণ: S, M, L, XL, XXL, XXXL। সর্বোচ্চ ২০টি অপশন।", "Example: S, M, L, XL, XXL, XXXL. Maximum 20 options.")}</small>
       </fieldset>
 
       <fieldset>

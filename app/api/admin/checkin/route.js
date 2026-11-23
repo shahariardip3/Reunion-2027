@@ -1,6 +1,7 @@
 
 import { db } from "../../../../lib/supabase";
-import { isAdmin } from "../../../../lib/auth";
+import { getAdminSession } from "../../../../lib/auth";
+import { writeAudit } from "../../../../lib/audit-log";
 import { csrfGuard, rateLimit } from "../../../../lib/security";
 import { fail, json, dbFail, UUID_RE } from "../../../../lib/http";
 import { signedUrlMap } from "../../../../lib/photos";
@@ -33,9 +34,8 @@ const REGISTRATION_FIELDS =
 
 export async function POST(req) {
   // Admin authentication
-  if (!(await isAdmin())) {
-    return fail("Unauthorized", 401);
-  }
+  const session = await getAdminSession();
+  if (!session) return fail("Unauthorized", 401);
 
   // CSRF protection
   const csrf = csrfGuard(req);
@@ -142,7 +142,7 @@ export async function POST(req) {
 
   const updateData = {
     [config.timestamp]: timestamp,
-    [config.by]: "admin",
+    [config.by]: session.name || session.username,
   };
 
   const { data, error } = await sb
@@ -164,6 +164,7 @@ export async function POST(req) {
   }
 
   if (data) {
+    await writeAudit(`${body.action}_marked`, data, { source: "qr_scanner", new_value: data[config.timestamp] });
     return json({
       ok: true,
       message: "Action completed successfully.",

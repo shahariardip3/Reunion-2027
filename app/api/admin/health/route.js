@@ -1,13 +1,17 @@
 import { db, describeKey } from "../../../../lib/supabase";
-import { isAdmin, isAdminAuthConfigured } from "../../../../lib/auth";
+import { isMainAdmin, isAdminAuthConfigured } from "../../../../lib/auth";
 import { siteUrl } from "../../../../lib/site";
 import { fail, json } from "../../../../lib/http";
 
 // Columns the current version of the site needs, per table.
 const PROBES = {
-  settings: "id,registration_open,reunion_date,venue_bn,event_title_bn,payment_note_bn,bkash_number,nagad_number,bank_name,bank_branch,bank_account_name,bank_account_number,bank_routing,bank_note,facebook_page_url,show_public,amount",
-  registrations: "id,full_name,ssc_batch,profession,phone,phone_public,photo_path,trx_id,pay_method,status,reg_code,checkin_token,attended_at,attended_by",
+  settings: "id,registration_open,reunion_date,venue_bn,event_title_bn,payment_note_bn,bkash_number,nagad_number,bank_name,bank_branch,bank_account_name,bank_account_number,bank_routing,bank_note,facebook_page_url,show_public,amount,email_field_enabled,email_field_required,tshirt_field_enabled,tshirt_field_required,tshirt_sizes",
+  registrations: "id,full_name,ssc_batch,profession,phone,email,tshirt_size,phone_public,photo_path,trx_id,pay_method,status,reg_code,checkin_token,attended_at,attended_by",
   notices: "id,title_bn,title_en,body_bn,body_en,published,pinned,expires_at,updated_at",
+  email_logs: "id,recipient,email_type,status,created_at",
+  admin_users: "id,username,display_name,is_active,created_at",
+  activity_logs: "id,admin_username,admin_role,action,created_at",
+  registration_trash: "id,original_id,deleted_by,deleted_at",
 };
 
 function classify(error) {
@@ -20,7 +24,7 @@ function classify(error) {
 
 /** Admin-only diagnostics: tells the admin exactly what is wrong with the Supabase setup. */
 export async function GET() {
-  if (!(await isAdmin())) return fail("Unauthorized", 401);
+  if (!(await isMainAdmin())) return fail("Unauthorized", 401);
   const checks = [];
   const add = (id, status, extra = {}) => checks.push({ id, status, ...extra });
 
@@ -29,6 +33,7 @@ export async function GET() {
   add("env_key", key.ok ? "ok" : "error", { detail: key.type });
   add("env_admin", isAdminAuthConfigured() ? "ok" : "error");
   add("env_site", siteUrl() ? "ok" : "warn", { detail: siteUrl() });
+  add("env_email", process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD ? "ok" : "warn", { detail: process.env.GMAIL_USER ? "Gmail address set" : "Gmail SMTP not configured" });
 
   let sb;
   try { sb = db(); } catch (e) { add("db_client", "error", { detail: e.message }); return json({ checks }, 200, { "Cache-Control": "no-store" }); }

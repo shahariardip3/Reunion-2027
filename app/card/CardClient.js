@@ -12,11 +12,17 @@ export default function CardClient({ lang = "en" }) {
   useEffect(() => {
     let cancelled = false;
     let lookup = null;
-    try { lookup = JSON.parse(sessionStorage.getItem("reunion_card_lookup") || "null"); } catch {}
-    if (!lookup?.trx || !lookup?.phone) { setErr(t(lang, "statusFirst")); return; }
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const reg = params.get("reg");
+      const trx = params.get("trx");
+      if (reg && trx) lookup = { reg_code: reg, trx };
+      if (!lookup) lookup = JSON.parse(sessionStorage.getItem("reunion_card_lookup") || "null");
+    } catch {}
+    if (!lookup?.trx || (!lookup?.phone && !lookup?.reg_code)) { setErr(t(lang, "statusFirst")); return; }
     (async () => {
       try {
-        const r = await fetch("/api/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trx: lookup.trx, phone: lookup.phone, lang }) });
+        const r = await fetch("/api/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trx: lookup.trx, phone: lookup.phone, reg_code: lookup.reg_code, lang }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(r.status === 429 ? t(lang, "tooMany") : t(lang, "statusFail"));
         if (j.status !== "approved") throw new Error(t(lang, "pendingNote"));
