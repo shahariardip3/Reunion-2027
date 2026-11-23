@@ -15,7 +15,7 @@ export default async function Page() {
   const sb = db();
   const [{ data: rows }, settingsResult, noticesResult] = await Promise.all([
     sb.from("registrations").select("*").order("created_at", { ascending: false }),
-    session.role === "main" ? sb.from("settings").select("*").eq("id", 1).maybeSingle() : Promise.resolve({ data: null }),
+    session.role === "main" ? sb.from("settings").select("*").eq("id", 1).maybeSingle() : sb.from("settings").select("tshirt_field_enabled,tshirt_sizes").eq("id", 1).maybeSingle(),
     session.role === "main" ? sb.from("notices").select("*").order("created_at", { ascending: false }).limit(100) : Promise.resolve({ data: [] }),
   ]);
   const s = settingsResult.data;

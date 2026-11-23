@@ -30,7 +30,7 @@ const ACTIONS = {
 };
 
 const REGISTRATION_FIELDS =
-  "id,full_name,ssc_batch,profession,reg_code,status,photo_path,attended_at,attended_by,gift_received_at,gift_received_by,food_received_at,food_received_by";
+  "id,full_name,ssc_batch,profession,phone,email,tshirt_size,reg_code,status,photo_path,attended_at,attended_by,gift_received_at,gift_received_by,food_received_at,food_received_by";
 
 export async function POST(req) {
   // Admin authentication

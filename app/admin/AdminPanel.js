@@ -49,6 +49,12 @@ export default function AdminPanel({
     (r) => !!r.food_received_at
   ).length;
 
+  const tshirtEnabled = settings.tshirt_field_enabled === true;
+  const tshirtCounts = (Array.isArray(settings.tshirt_sizes) ? settings.tshirt_sizes : [])
+    .map((size) => ({ size, count: regs.filter((r) => r.status === "approved" && String(r.tshirt_size || "").toUpperCase() === String(size).toUpperCase()).length }))
+    .filter((item) => item.count > 0);
+  const approvedWithoutSize = regs.filter((r) => r.status === "approved" && !r.tshirt_size).length;
+
   const amount = Number(settings.amount) || 0;
 
   // Sub Admins only receive registration approval and QR scanning tools.
@@ -137,6 +143,19 @@ export default function AdminPanel({
         ))}
       </div>
 
+      {tshirtEnabled && (
+        <section className="card tshirt-statistics" aria-label="T-shirt size statistics">
+          <h2>{tr(lang, "অনুমোদিত Alumni-দের T-shirt Size Statistics", "Approved Alumni T-shirt Size Statistics")}</h2>
+          <p className="muted">{tr(lang, "শুধুমাত্র Approved Alumni গণনা করা হয়েছে।", "Only approved alumni are counted.")}</p>
+          <div className="stats">
+            {tshirtCounts.map(({ size, count }) => (
+              <div className="card" key={size}><b>{nf.format(count)}</b>{size}</div>
+            ))}
+            {approvedWithoutSize > 0 && <div className="card"><b>{nf.format(approvedWithoutSize)}</b>{tr(lang, "সাইজ দেওয়া হয়নি", "No size selected")}</div>}
+          </div>
+        </section>
+      )}
+
       {/* Admin Navigation */}
       <div
         className="admin-tabs"
@@ -183,7 +202,7 @@ export default function AdminPanel({
         )}
 
         {tab === "checkin" && (
-          <CheckinScanner lang={lang} />
+          <CheckinScanner lang={lang} tshirtEnabled={tshirtEnabled} />
         )}
 
         {role === "main" && tab === "notices" && (

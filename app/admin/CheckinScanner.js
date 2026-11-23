@@ -33,7 +33,7 @@ export function parseLookup(value) {
   return null;
 }
 
-export default function CheckinScanner({ lang = "en" }) {
+export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const verifyRef = useRef(null);
@@ -405,6 +405,9 @@ export default function CheckinScanner({ lang = "en" }) {
               <h3>{reg.full_name}</h3>
               <p>{tr(lang, "এসএসসি ব্যাচ", "SSC Batch")}: {reg.ssc_batch}</p>
               <p>{tr(lang, "পেশা", "Profession")}: {reg.profession || "—"}</p>
+              <p>{tr(lang, "ফোন", "Phone")}: {reg.phone || "—"}</p>
+              <p>{tr(lang, "ইমেইল", "Email")}: {reg.email || "—"}</p>
+              {tshirtEnabled && <p>{tr(lang, "টি-শার্ট সাইজ", "T-shirt Size")}: <b>{reg.tshirt_size || "—"}</b></p>}
               <p>
                 {tr(lang, "রেজিস্ট্রেশন আইডি", "Registration ID")}:{" "}
                 <b>{reg.reg_code || "—"}</b>
