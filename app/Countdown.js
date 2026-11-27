@@ -35,7 +35,7 @@ export default function Countdown({ date, lang = "en" }) {
   return (
     <div className="count" role="timer" aria-label={`${num(p.d)} ${t(lang, "days")}`}>
       {units.map(([value, key]) => (
-        <div className="count-box" key={key}><b>{value}</b><span>{t(lang, key)}</span></div>
+        <div className="count-box" key={key}><b key={value}>{value}</b><span>{t(lang, key)}</span></div>
       ))}
     </div>
   );

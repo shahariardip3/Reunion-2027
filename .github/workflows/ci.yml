@@ -1,0 +1,22 @@
+name: CI
+on:
+  push:
+  pull_request:
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:unit
+      - run: npm run build
+        env:
+          # Dummy values so `next build` can run without real secrets.
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: dummy
+          ADMIN_PASSWORD: ci-only-password-1234567890
+          ADMIN_SECRET: ci-only-secret-0123456789-0123456789

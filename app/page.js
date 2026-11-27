@@ -4,6 +4,13 @@ import { db } from "../lib/supabase";
 import Countdown from "./Countdown";
 import ShareButtons from "./ShareButtons";
 import HeroSlider from "./HeroSlider";
+import Reveal from "./Reveal";
+import CountUp from "./CountUp";
+import StickyRegister from "./StickyRegister";
+import SchoolMemoryGallery from "./SchoolMemoryGallery";
+import HistoryTimeline from "./HistoryTimeline";
+import { getHistoryEvents, buildTimeline } from "../lib/history";
+import { getGalleryPhotos, getGalleryCount } from "../lib/gallery";
 import { t, tr } from "../lib/i18n";
 import { getLang } from "../lib/server-lang";
 import { SCHOOL, siteUrl } from "../lib/site";
@@ -83,7 +90,7 @@ export default async function Home() {
   const lang = await getLang();
   const sb = db();
 
-  const [s, notices, confirmed] = await Promise.all([
+  const [s, notices, confirmed, memoriesPhotos, reunionPhotos, memoriesCount, reunionCount, historyEvents] = await Promise.all([
     getSettings(),
 
     safe((async () => {
@@ -106,12 +113,18 @@ export default async function Home() {
         .eq("status", "approved");
 
       return error ? 0 : count || 0;
-    })(), 0)
+    })(), 0),
+    getGalleryPhotos("memories", 6),
+    getGalleryPhotos("reunion", 6),
+    getGalleryCount("memories"),
+    getGalleryCount("reunion"),
+    getHistoryEvents()
   ]);
 
   const open = isRegistrationOpen(s);
   const locale = lang === "bn" ? "bn-BD" : "en-GB";
   const nf = new Intl.NumberFormat(lang === "bn" ? "bn-BD" : "en-US");
+  const pad2 = (n) => new Intl.NumberFormat(lang === "bn" ? "bn-BD" : "en-US", { minimumIntegerDigits: 2, useGrouping: false }).format(n);
 
   const date = s.reunion_date
     ? new Date(`${s.reunion_date}T00:00:00Z`).toLocaleDateString(
@@ -138,6 +151,8 @@ export default async function Home() {
         : METHOD_NAMES[m.id][lang]
     )
     .join(", ");
+
+  const timeline = buildTimeline({ lang, events: historyEvents, reunionDate: s.reunion_date, venue });
 
   const ld = eventLd({
     s,
@@ -203,28 +218,30 @@ export default async function Home() {
         className="home-hero-slider"
         aria-label={tr(lang, "পুনর্মিলনী ২০২৭", "Reunion 2027")}
       >
-        <HeroSlider lang={lang} />
+        <HeroSlider lang={lang} title={title} date={date || ""} venue={venue || ""} />
       </section>
 
       {/* EXISTING HERO CONTENT */}
       <section className="hero">
         <div className="hero-body">
-          <img
-            className="biglogo"
-            src="/logo-256.png"
-            alt={`${t(lang, "school")} logo`}
-            width="132"
-            height="132"
-          />
-
-          <span className="eyebrow">
-            {t(lang, "established")} · {t(lang, "location")}
-          </span>
-
-          <h1>
-            <span className="h1-school">{t(lang, "school")}</span>
-            <span className="h1-title">{title}</span>
-          </h1>
+          <div className="hero-head">
+            <img
+              className="biglogo"
+              src="/logo-256.png"
+              alt={`${t(lang, "school")} logo`}
+              width="132"
+              height="132"
+            />
+            <div className="hero-head-text">
+              <span className="eyebrow">
+                {t(lang, "established")} · {t(lang, "location")}
+              </span>
+              <h1>
+                <span className="h1-school">{t(lang, "school")}</span>
+                <span className="h1-title">{title}</span>
+              </h1>
+            </div>
+          </div>
 
           {note && <p className="lead">{note}</p>}
 
@@ -263,7 +280,7 @@ export default async function Home() {
 
       {(date || venue || confirmed > 0) && (
         <section
-          className="info-grid"
+          className="info-grid" data-reveal-stagger
           aria-label={tr(lang, "অনুষ্ঠানের তথ্য", "Event information")}
         >
           {date && (
@@ -284,13 +301,16 @@ export default async function Home() {
             <div className="info-tile">
               <span>✅ {tr(lang, "অংশগ্রহণকারী", "Attendees")}</span>
               <b>
-                {nf.format(confirmed)} {t(lang, "confirmedCount")}
+                <CountUp value={confirmed} lang={lang} /> {t(lang, "confirmedCount")}
               </b>
             </div>
           )}
         </section>
       )}
 
+      <div className="gold-divider" aria-hidden="true"><span /></div>
+
+      <Reveal className="section-reveal">
       <section className="section about" aria-labelledby="about-title">
         <div className="card">
           <h2 id="about-title">
@@ -314,14 +334,162 @@ export default async function Home() {
           </p>
         </div>
       </section>
+      </Reveal>
 
+      <Reveal className="section-reveal">
+      <section className="section school-profile" aria-labelledby="school-profile-title">
+        <div className="school-profile-head">
+          <div>
+            <span className="school-profile-kicker">{tr(lang, "এক নজরে বিদ্যালয়", "SCHOOL AT A GLANCE")}</span>
+            <h2 id="school-profile-title">{tr(lang, "আমাদের বিদ্যালয়, আমাদের গর্ব", "A school. A thousand memories.")}</h2>
+            <p>
+              {tr(
+                lang,
+                "শুধু একটি শিক্ষাপ্রতিষ্ঠান নয়—এটি বহু প্রজন্মের বন্ধুত্ব, শেখা ও স্মৃতির ঠিকানা। পুনর্মিলনী ২০২৭ সেই বন্ধনকে আবার কাছে আনার একটি সুযোগ।",
+                "More than a place to learn, our school is a shared home of friendships, lessons and memories across generations. Reunion 2027 brings that bond together again."
+              )}
+            </p>
+          </div>
+          <div className="school-profile-mark" aria-hidden="true">GHS<span>1940</span></div>
+        </div>
+
+        <div className="school-facts-grid" data-reveal-stagger>
+          <article className="school-fact">
+            <span className="school-fact-icon" aria-hidden="true">✦</span>
+            <span>{tr(lang, "প্রতিষ্ঠিত", "Established")}</span>
+            <strong>1940</strong>
+          </article>
+          <article className="school-fact">
+            <span className="school-fact-icon" aria-hidden="true">⌁</span>
+            <span>{tr(lang, "EIIN নম্বর", "EIIN")}</span>
+            <strong>115729</strong>
+          </article>
+          <article className="school-fact">
+            <span className="school-fact-icon" aria-hidden="true">▤</span>
+            <span>{tr(lang, "শিক্ষাস্তর", "Education level")}</span>
+            <strong>{tr(lang, "মাধ্যমিক", "Secondary")}</strong>
+          </article>
+          <article className="school-fact">
+            <span className="school-fact-icon" aria-hidden="true">⌖</span>
+            <span>{tr(lang, "অবস্থান", "Location")}</span>
+            <strong>{tr(lang, "ঝিকরগাছা, যশোর", "Jhikargacha, Jashore")}</strong>
+          </article>
+        </div>
+
+        <div className="profile-stats" role="group" aria-label={tr(lang, "২০২৪ সালের স্কুল প্রোফাইলের তথ্য", "School profile figures for 2024")}>
+          <div className="profile-stats-head">
+            <span className="profile-year">{tr(lang, "২০২৪ প্রোফাইল", "2024 PROFILE")}</span>
+            <small>{tr(lang, "সূত্র: Sohopathi বিদ্যালয় প্রোফাইল (২০২৪ সালের তথ্য)", "Source: Sohopathi school profile (2024 figures)")}</small>
+          </div>
+          <div className="profile-stats-grid" data-reveal-stagger>
+            <div className="profile-stat">
+              <span className="profile-stat-icon" aria-hidden="true">🎓</span>
+              <strong><CountUp value={911} lang={lang} /></strong>
+              <span>{tr(lang, "শিক্ষার্থী", "Students")}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-icon" aria-hidden="true">📚</span>
+              <strong><CountUp value={25} lang={lang} /></strong>
+              <span>{tr(lang, "শিক্ষক", "Teachers")}</span>
+            </div>
+            <div className="profile-stat">
+              <span className="profile-stat-icon" aria-hidden="true">🤝</span>
+              <strong><CountUp value={7} lang={lang} /></strong>
+              <span>{tr(lang, "কর্মী", "Staff")}</span>
+            </div>
+            <div className="profile-stat profile-stat-ratio">
+              <span className="profile-stat-icon" aria-hidden="true">⚖️</span>
+              <strong>≈ <CountUp value={36} lang={lang} /> : 1</strong>
+              <span>{tr(lang, "শিক্ষার্থী প্রতি শিক্ষক (হিসাবকৃত)", "Students per teacher (calculated)")}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="school-history-strip">
+          <div>
+            <span>{tr(lang, "শ্রেণি", "CLASSES")}</span>
+            <strong>{tr(lang, "৬ষ্ঠ–১০ম", "Grades 6–10")}</strong>
+            <small>{tr(lang, "মাধ্যমিক স্তর", "Secondary level")}</small>
+          </div>
+        </div>
+
+        <div className="school-links-panel">
+          <div className="school-links-heading">
+            <h3>{tr(lang, "বিদ্যালয় সম্পর্কে আরও জানুন", "Explore school information")}</h3>
+            <p>{tr(lang, "তথ্য ও আপডেটের জন্য নিচের প্রোফাইলগুলো দেখুন।", "Visit these profiles for school information and updates.")}</p>
+          </div>
+          <div className="school-links-grid" data-reveal-stagger>
+            <a href="https://ganganandapursecondaryschool.jessoreboard.gov.bd/" target="_blank" rel="noopener noreferrer">
+              <span className="school-link-icon" aria-hidden="true">↗</span>
+              <span><b>{tr(lang, "যশোর শিক্ষা বোর্ড", "Jashore Education Board")}</b><small>{tr(lang, "বিদ্যালয়ের বোর্ড ওয়েবসাইট", "School board website")}</small></span>
+            </a>
+            <a href="https://www.sohopathi.com/ganganandapur-high-school/" target="_blank" rel="noopener noreferrer">
+              <span className="school-link-icon" aria-hidden="true">S</span>
+              <span><b>Sohopathi</b><small>{tr(lang, "বিদ্যালয়ের তথ্য ও প্রোফাইল", "School profile and details")}</small></span>
+            </a>
+            <a href="https://bn.wikipedia.org/wiki/গঙ্গানন্দপুর_মাধ্যমিক_বিদ্যালয়" target="_blank" rel="noopener noreferrer">
+              <span className="school-link-icon" aria-hidden="true">W</span>
+              <span><b>Wikipedia</b><small>{tr(lang, "বাংলা তথ্যসূত্র", "Bangla reference page")}</small></span>
+            </a>
+          </div>
+        </div>
+      </section>
+      </Reveal>
+
+      <Reveal className="section-reveal">
+      <section className="section history-section" id="history" aria-labelledby="history-title">
+        <div className="history-head">
+          <span className="memory-kicker">{tr(lang, "আমাদের পথচলা", "OUR JOURNEY")}</span>
+          <h2 id="history-title">{tr(lang, "১৯৪০ থেকে ২০২৭: ইতিহাসের পথে", "1940 to 2027: a journey through time")}</h2>
+          <p>{tr(lang, "একটি বিদ্যালয়ের যাত্রা—শুরু থেকে আজকের পুনর্মিলনী পর্যন্ত।", "The journey of a school, from its first day to today's reunion.")}</p>
+        </div>
+        <HistoryTimeline lang={lang} items={timeline} />
+        <div className="history-more"><Link className="gallery-view-all" href="/history">{tr(lang, "পূর্ণ টাইমলাইন দেখুন", "Open full timeline")} ↗</Link></div>
+      </section>
+      </Reveal>
+
+      <Reveal className="section-reveal">
+      <section className="section memory-section" aria-labelledby="memory-title">
+        <div className="memory-section-heading">
+          <div>
+            <span className="memory-kicker">{tr(lang, "আমাদের স্মৃতি", "OUR SHARED MEMORIES")}</span>
+            <h2 id="memory-title">{tr(lang, "সেই চেনা আঙিনা, সেই চেনা মুখ", "The place, the people, the memories")}</h2>
+            <p>{tr(lang, "স্কুলজীবনের পুরোনো ছবি, বন্ধুদের মুহূর্ত ও বিদ্যালয়ের স্মৃতি।", "Old school days, familiar faces and memories from our school years.")}</p>
+          </div>
+          <div className="memory-gallery-heading-actions">
+            <div className="memory-count"><strong>{pad2(memoriesCount)}</strong><span>{tr(lang, "স্মৃতির ছবি", "MEMORIES")}</span></div>
+            <Link className="gallery-view-all" href="/memories">{tr(lang, "সব ছবি দেখুন", "View all photos")} ↗</Link>
+          </div>
+        </div>
+        <SchoolMemoryGallery lang={lang} photos={memoriesPhotos} category="memories" compact />
+      </section>
+      </Reveal>
+
+      <Reveal className="section-reveal">
+      <section className="section memory-section reunion-photo-section" aria-labelledby="reunion-gallery-title">
+        <div className="memory-section-heading">
+          <div>
+            <span className="memory-kicker">{tr(lang, "মিলনমেলার মুহূর্ত", "REUNION MOMENTS")}</span>
+            <h2 id="reunion-gallery-title">{tr(lang, "রিইউনিয়ন ফটো গ্যালারি", "Reunion Photo Gallery")}</h2>
+            <p>{tr(lang, "Reunion 2027-এর আয়োজন, বন্ধুদের মিলন ও বিশেষ মুহূর্তের ছবি এখানে থাকবে।", "Event highlights, alumni gatherings and special moments from Reunion 2027 will appear here.")}</p>
+          </div>
+          <div className="memory-gallery-heading-actions">
+            <div className="memory-count"><strong>{pad2(reunionCount)}</strong><span>{tr(lang, "রিইউনিয়ন", "REUNION")}</span></div>
+            <Link className="gallery-view-all" href="/reunion-gallery">{tr(lang, "সব ছবি দেখুন", "View all photos")} ↗</Link>
+          </div>
+        </div>
+        <SchoolMemoryGallery lang={lang} photos={reunionPhotos} category="reunion" compact />
+      </section>
+      </Reveal>
+
+      <Reveal className="section-reveal">
       <section className="section" aria-labelledby="how-title">
         <div className="section-head">
           <h2 id="how-title">{t(lang, "howTitle")}</h2>
           <p>{t(lang, "howSub")}</p>
         </div>
 
-        <ol className="steps">
+        <ol className="steps" data-reveal-stagger>
           {[1, 2, 3, 4].map((n) => (
             <li className="step" key={n}>
               <span className="step-no" aria-hidden="true">
@@ -335,8 +503,10 @@ export default async function Home() {
           ))}
         </ol>
       </section>
+      </Reveal>
 
       {notices.length > 0 && (
+        <Reveal className="section-reveal">
         <section className="section" aria-labelledby="notice-title">
           <div className="section-head">
             <h2 id="notice-title">{t(lang, "latestNotices")}</h2>
@@ -365,8 +535,12 @@ export default async function Home() {
             </Link>
           </div>
         </section>
+        </Reveal>
       )}
 
+      <div className="gold-divider" aria-hidden="true"><span /></div>
+
+      <Reveal className="section-reveal">
       <section className="section" aria-labelledby="faq-title">
         <div className="section-head">
           <h2 id="faq-title">
@@ -374,7 +548,7 @@ export default async function Home() {
           </h2>
         </div>
 
-        <div className="faq">
+        <div className="faq" data-reveal-stagger>
           {faqs.map(([q, a]) => (
             <details key={q}>
               <summary>{q}</summary>
@@ -383,6 +557,9 @@ export default async function Home() {
           ))}
         </div>
       </section>
+      </Reveal>
+
+      {open && <StickyRegister lang={lang} />}
 
       {isFacebookUrl(s.facebook_page_url) && (
         <div className="facebook-page-wrap">

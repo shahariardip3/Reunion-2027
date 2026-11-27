@@ -52,8 +52,10 @@
    - `SITE_URL` = সম্পূর্ণ live website URL, যেমন `https://your-site.vercel.app`
    - `SMTP_HOST=smtp.gmail.com`
    - `SMTP_PORT=465`
-4. Vercel-এ Redeploy করুন।
-5. Supabase SQL Editor-এ নতুন `supabase/schema.sql` পুরোটা Run করুন।
+4. Vercel-এ Redeploy করুন। `vercel.json`-এ Email Queue retry Cron যুক্ত আছে।
+5. Supabase SQL Editor-এ `supabase/schema.sql` আগে চালানো থাকলে আবার চালানোর দরকার নেই; নতুন schema পরিবর্তন থাকলে নির্দেশনা অনুযায়ী চালান।
+6. Registration submit এবং Admin approval-এর সময় প্রথম email attempt সঙ্গে সঙ্গে হবে। SMTP ব্যর্থ হলে job queue-তে থাকবে এবং Cron পরে retry করবে।
+7. Localhost-এ Cron নিজে থেকে চলে না; local test-এ registration/approval থেকে immediate send হবে। Pending queue retry করতে `/api/cron/email-outbox`-এ `Authorization: Bearer <CRON_SECRET>` header দিয়ে GET request দিন।
 
 Admin → Settings → Registration থেকে Email Field চালু/বন্ধ এবং Required/Optional করা যাবে। Admin → Email History-তে পাঠানোর অবস্থা দেখা যাবে এবং ব্যর্থ ইমেইল আবার পাঠানো যাবে।
 
@@ -70,3 +72,17 @@ Admin → Settings → Registration থেকে Email Field চালু/বন
 - Delete করা registration Recycle Bin-এ থাকবে। Restore বা Permanent Delete Main Admin করতে পারবে।
 - Activity Log-এ Admin-এর নাম, action এবং সময় দেখা যাবে।
 - T-shirt Size Field Main Admin Settings থেকে চালু/বন্ধ, required/optional এবং size options পরিবর্তন করা যাবে।
+
+
+## নতুন Photo Gallery setup (এই ZIP-এর নতুন অংশ)
+
+1. Supabase Dashboard → SQL Editor-এ গিয়ে আপডেট করা `supabase/schema.sql` একবার Run করুন। এটি `gallery_photos` table এবং `gallery-photos` public image bucket তৈরি করবে; registrations বা পুরোনো alumni photos মুছবে না।
+2. Main Admin হিসেবে `/admin`-এ লগইন করুন। Admin Panel-এর **Photo Gallery** tab থেকে `Memories Gallery` বা `Reunion Photo Gallery` নির্বাচন করে ছবি upload/delete করুন। Gallery management শুধু Main Admin-এর জন্য; Sub Admin-এর existing permissions অপরিবর্তিত।
+3. Public site-এ `/memories` ও `/reunion-gallery` আলাদা page, এবং homepage-এ দুটির preview দেখা যাবে।
+4. আগের bundled static Memories gallery images আর ব্যবহার করা হচ্ছে না। নতুন gallery-তে কোনো default/placeholder ছবি থাকবে না; Admin upload না করা পর্যন্ত empty state দেখাবে। আগের ZIP-এর bundled static Memories gallery-র ৭টি ছবি সরানো হয়েছে; Supabase-এর registrations বা alumni-photo bucket স্পর্শ করা হয়নি।
+5. Gallery upload-এর allowed formats JPG, PNG ও WebP; সর্বোচ্চ file size 8 MB।
+
+**নিরাপত্তা:** `.env.local` কখনো GitHub বা ZIP-এ upload করবেন না। নতুন ZIP extract করার পর নিজের private `.env.local` আলাদা করে copy করুন।
+
+### Vercel Cron সম্পর্কে গুরুত্বপূর্ণ
+`vercel.json`-এর schedule প্রতিদিন 03:00 UTC (বাংলাদেশ সময় সকাল 09:00) চালু হয়। Vercel Hobby/Free plan-এ Cron দিনে একবারের বেশি চালানো যায় না; Pro plan-এ চাইলে schedule `*/5 * * * *` করা যায়। Registration ও approval-এর প্রথম email attempt cron-এর অপেক্ষা করে না—সঙ্গে সঙ্গে হয়; Cron শুধু ব্যর্থ/অপেক্ষমাণ job retry করে। Cron কেবল Production deployment-এ চলে।

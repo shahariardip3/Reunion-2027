@@ -11,8 +11,12 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
 
   const [filter, setFilter] = useState("pending");
   const [q, setQ] = useState("");
+  const [batchFilter, setBatchFilter] = useState("all");
+  const [methodFilter, setMethodFilter] = useState("all");
   const [busyId, setBusyId] = useState("");
   const [msg, setMsg] = useState(null);
+  const [selected, setSelected] = useState([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const locale = lang === "bn" ? "bn-BD" : "en-GB";
 
@@ -29,11 +33,10 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
   const list = useMemo(() => regs.filter((r) => {
     const okFilter =
       filter === "all" ||
-      (filter === "attended"
-        ? !!r.attended_at
+      (filter === "attended" ? !!r.attended_at
         : r.status === filter);
 
-    return okFilter && (
+    return okFilter && (batchFilter === "all" || r.ssc_batch === batchFilter) && (methodFilter === "all" || r.pay_method === methodFilter) && (
       !term ||
       [
         r.full_name,
@@ -44,7 +47,7 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
         r.profession,
       ].some((v) => String(v || "").toLowerCase().includes(term))
     );
-  }), [regs, filter, term]);
+  }), [regs, filter, term, batchFilter, methodFilter]);
 
   async function act(r, action, value) {
     if (action === "delete" && !confirm(t(lang, "confirmDelete"))) return;
@@ -81,8 +84,8 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
     setBusyId("");
 
     if (res.ok) {
-      if (action === "approve" && r.email && res.data?.email_sent === false) {
-        setMsg({ type: "error", text: tr(lang, "নিবন্ধন অনুমোদিত হয়েছে, কিন্তু Approval Email পাঠানো যায়নি। Email History দেখুন।", "Registration approved, but the approval email could not be sent. Check Email History.") });
+      if (action === "approve" && r.email && res.data?.email_queued === false && res.data?.email_sent !== true) {
+        setMsg({ type: "error", text: tr(lang, "নিবন্ধন অনুমোদিত হয়েছে, কিন্তু email queue-তে যোগ করা যায়নি।", "Registration approved, but the approval email could not be queued.") });
       }
       router.refresh();
       return;
@@ -102,6 +105,26 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
     ["all", t(lang, "all")],
   ];
 
+  const batches = [...new Set(regs.map((r) => r.ssc_batch).filter(Boolean))].sort((a,b) => Number(b)-Number(a));
+
+  async function exportSelected() {
+    if (!selected.length || selected.length > 500) return;
+    const response = await fetch("/api/admin/registrations/bulk-export", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: selected }) });
+    if (!response.ok) { const data = await response.json().catch(() => ({})); setMsg({ type: "error", text: data.error || "Export failed." }); return; }
+    const blob = await response.blob(), url = URL.createObjectURL(blob), link = document.createElement("a");
+    link.href = url; link.download = "reunion-selected-registrations.csv"; link.click(); URL.revokeObjectURL(url);
+  }
+
+  async function bulk(action) {
+    if (!selected.length || bulkBusy) return;
+    if (!window.confirm(`Apply ${action} to ${selected.length} selected registrations?`)) return;
+    setBulkBusy(true); setMsg(null);
+    const res = await send("/api/admin/registrations/bulk", { ids: selected, action });
+    setBulkBusy(false);
+    if (!res.ok) { setMsg({ type: "error", text: res.data?.error || "Bulk action failed." }); return; }
+    setSelected([]); setMsg({ type: res.data.failed ? "error" : "ok", text: `${res.data.succeeded} completed, ${res.data.failed} failed.` }); router.refresh();
+  }
+
   function statusText(label, date) {
     if (!date) return null;
 
@@ -120,6 +143,8 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
   return (
     <>
       <div className="toolbar">
+        <select aria-label="Filter by SSC batch" value={batchFilter} onChange={(e) => setBatchFilter(e.target.value)}><option value="all">All batches</option>{batches.map((batch) => <option key={batch} value={batch}>{batch}</option>)}</select>
+        <select aria-label="Filter by payment method" value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)}><option value="all">All payment methods</option><option value="bkash">bKash</option><option value="nagad">Nagad</option><option value="bank">Bank</option></select>
         <input
           type="search"
           placeholder={t(lang, "search")}
@@ -133,6 +158,7 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
         </a>}
       </div>
 
+      {role === "main" && <div className="toolbar"><button className="btn ghost small" type="button" onClick={() => setSelected(list.slice(0, 50).map((r) => r.id))}>Select first 50 visible</button><button className="btn ghost small" type="button" onClick={() => setSelected([])}>Clear</button><span>{selected.length} selected</span><button className="btn ghost small" disabled={!selected.length || selected.length > 500} onClick={exportSelected}>Export selected</button><button className="btn ok small" disabled={!selected.length || bulkBusy} onClick={() => bulk("approve")}>Bulk approve</button><button className="btn bad small" disabled={!selected.length || bulkBusy} onClick={() => bulk("reject")}>Bulk reject</button></div>}
       <div className="tabs" role="group" aria-label={t(lang, "registrations")}>
         {filters.map(([key, label]) => (
           <button
@@ -165,6 +191,7 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
 
         return (
           <article className="card item" key={r.id}>
+            {role === "main" && <label className="bulk-select"><input type="checkbox" checked={selected.includes(r.id)} onChange={(e) => setSelected((old) => e.target.checked ? [...old, r.id] : old.filter((id) => id !== r.id))} /> Select</label>}
             {r.photo_url ? (
               <a
                 href={r.photo_url}
@@ -224,7 +251,6 @@ export default function RegistrationsTab({ regs, lang = "en", role = "main" }) {
                     </span>
                   )}
                 </span>
-
                 {r.reg_code && (
                   <span>
                     ID: <b>{r.reg_code}</b>

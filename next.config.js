@@ -35,10 +35,11 @@ module.exports = (phase) => {
   return {
     poweredByHeader: false,
     reactStrictMode: true,
+    devIndicators: false,
     // Lets you open `npm run dev` from a phone on the same Wi-Fi (http://192.168.x.x:3000).
     allowedDevOrigins: ["192.168.*.*", "10.*.*.*", "172.16.*.*", "172.17.*.*", "172.18.*.*", "*.local"],
     async headers() {
-      const cache = ["/logo.png", "/logo-128.png", "/logo-256.png", "/logo-384.png", "/school-gate.jpg", "/school-gate-640.jpg", "/og-image.jpg"].map((source) => ({
+      const cache = ["/logo.png", "/logo-128.png", "/logo-256.png", "/logo-384.png", "/school-gate.jpg", "/school-gate-640.jpg", "/images/school-gate-hero.webp", "/images/school-gate-portrait.jpg", "/og-image.jpg"].map((source) => ({
         source,
         headers: [{ key: "Cache-Control", value: "public, max-age=604800, stale-while-revalidate=86400" }],
       }));

@@ -5,13 +5,16 @@ import { getLang } from "../lib/server-lang";
 import { SCHOOL, KEYWORDS, siteUrl } from "../lib/site";
 import LanguageSwitcher from "./LanguageSwitcher";
 import ThemeToggle from "./ThemeToggle";
+import FontSizeToggle from "./FontSizeToggle";
+import ScrollEffects from "./ScrollEffects";
+import ScrollProgress from "./ScrollProgress";
 import NavLinks from "./NavLinks";
 
 const FONT_URL =
-  "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap";
+  "https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap";
 
 // Runs before first paint so the saved theme never flashes. Light is the default.
-const THEME_SCRIPT = `try{var t=localStorage.getItem("theme");document.documentElement.dataset.theme=t==="dark"?"dark":"light"}catch(e){document.documentElement.dataset.theme="light"}`;
+const THEME_SCRIPT = `try{var t=localStorage.getItem("theme");document.documentElement.dataset.theme=t==="dark"?"dark":"light";var f=localStorage.getItem("fs");if(f==="lg"||f==="xl")document.documentElement.dataset.fs=f}catch(e){document.documentElement.dataset.theme="light"}`;
 
 // Development only: shows blocked scripts / JS errors as a red bar so a "dead" page is never silent.
 const DEV_WARN = `(function(){function show(m){var b=document.getElementById("__devwarn");if(!b){b=document.createElement("div");b.id="__devwarn";b.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:99999;background:#8f1d1d;color:#fff;padding:10px 14px;font:13px/1.4 monospace;white-space:pre-wrap";(document.body||document.documentElement).appendChild(b)}b.textContent+=m+"\\n"}window.addEventListener("securitypolicyviolation",function(e){show("CSP blocked: "+e.violatedDirective+" -> "+e.blockedURI)});window.addEventListener("error",function(e){show("JS error: "+e.message)});window.addEventListener("unhandledrejection",function(e){var r=e.reason;show("Unhandled promise: "+(r&&r.message?r.message:String(r)))})})();`;
@@ -73,7 +76,7 @@ function organizationLd() {
 
 export default async function RootLayout({ children }) {
   const lang = await getLang();
-  const links = [["/", "home"], ["/register", "register"], ["/status", "status"], ["/alumni", "navAlumni"], ["/notice", "notice"]];
+  const links = [["/", "home"], ["/register", "register"], ["/status", "status"], ["/alumni", "navAlumni"], ["/history", "history"], ["/memories", "memories"], ["/reunion-gallery", "reunionGallery"], ["/notice", "notice"]];
   return (
     <html lang={lang} data-theme="light" suppressHydrationWarning>
       <head>
@@ -84,6 +87,8 @@ export default async function RootLayout({ children }) {
         <link rel="stylesheet" href={FONT_URL} />
       </head>
       <body>
+        <ScrollProgress lang={lang} />
+        <ScrollEffects />
         <a className="skip-link" href="#main">{t(lang, "skip")}</a>
         <header className="top">
           <div className="topin">
@@ -93,6 +98,7 @@ export default async function RootLayout({ children }) {
             </Link>
             <NavLinks lang={lang} />
             <div className="controls">
+              <FontSizeToggle lang={lang} />
               <ThemeToggle lang={lang} />
               <LanguageSwitcher lang={lang} />
             </div>
@@ -112,7 +118,7 @@ export default async function RootLayout({ children }) {
               </div>
             </div>
             <nav className="foot-nav" aria-label={tr(lang, "ফুটার মেনু", "Footer menu")}>
-              {links.map(([href, key]) => <Link key={href} href={href}>{t(lang, key)}</Link>)}
+              {links.map(([href, key]) => <Link key={href} href={href}>{key === "history" ? tr(lang, "ইতিহাস", "History") : key === "memories" ? tr(lang, "স্মৃতির গ্যালারি", "Memories") : key === "reunionGallery" ? tr(lang, "রিইউনিয়ন গ্যালারি", "Reunion Photos") : t(lang, key)}</Link>)}
             </nav>
             <section className="creator-section" aria-label={tr(lang, "ওয়েবসাইট নির্মাতা", "Website creator")}>
               <div className="creator-kicker">{tr(lang, "ওয়েবসাইট নির্মাতা", "WEBSITE CREATOR")}</div>

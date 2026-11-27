@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Confetti from "./Confetti";
 import Link from "next/link";
 import { t, tr } from "../../lib/i18n";
 import { copyText } from "../../lib/clipboard";
@@ -97,6 +98,79 @@ function CopyField({ label, value, lang, big }) {
 }
 
 const methodLabel = (id, lang) => (id === "bank" ? tr(lang, "ব্যাংক", "Bank") : id === "nagad" ? "Nagad" : "bKash");
+
+function LampReveal({ children, lang }) {
+  const [on, setOn] = useState(false);
+  const [pull, setPull] = useState(0);
+  const drag = useRef(null);
+  const frame = useRef(0);
+  const reduced = useRef(false);
+  useEffect(() => {
+    reduced.current = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches || false;
+    return () => cancelAnimationFrame(frame.current);
+  }, []);
+  const springBack = () => {
+    cancelAnimationFrame(frame.current);
+    if (reduced.current) { setPull(0); return; }
+    let y = pull, velocity = -1.8;
+    const tick = () => {
+      velocity += -y * 0.19;
+      velocity *= 0.78;
+      y += velocity;
+      if (Math.abs(y) < 0.35 && Math.abs(velocity) < 0.35) { setPull(0); return; }
+      setPull(y);
+      frame.current = requestAnimationFrame(tick);
+    };
+    frame.current = requestAnimationFrame(tick);
+  };
+  const startPull = (e) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    drag.current = { y: e.clientY, moved: false };
+  };
+  const movePull = (e) => {
+    if (!drag.current) return;
+    const delta = Math.max(0, Math.min(62, e.clientY - drag.current.y));
+    if (delta > 5) drag.current.moved = true;
+    setPull(delta);
+  };
+  const endPull = () => {
+    if (!drag.current) return;
+    const amount = pull;
+    drag.current = null;
+    springBack();
+    if (amount > 13 || !amount) setOn(v => !v);
+  };
+  const toggle = () => setOn(v => !v);
+  return (
+    <section className={`lamp-registration ${on ? "lamp-is-on" : "lamp-is-off"}`}>
+      <div className="lamp-scene" aria-label={tr(lang, "আলো জ্বালাতে ল্যাম্পের দড়ি টানুন", "Pull the lamp cord to turn on the registration light")}>
+        <div className="lamp-scene-stars" aria-hidden="true" />
+        <div className="lamp-beam" aria-hidden="true" />
+        <div className="lamp-art" aria-hidden="true">
+          <svg viewBox="0 0 260 290" role="presentation">
+            <defs><linearGradient id="lampShade" x1="0" x2="1"><stop stopColor="#8b672b"/><stop offset=".5" stopColor="#f4c75d"/><stop offset="1" stopColor="#7b5723"/></linearGradient><linearGradient id="lampStem" x1="0" x2="1"><stop stopColor="#51412b"/><stop offset=".5" stopColor="#d1aa5e"/><stop offset="1" stopColor="#44351f"/></linearGradient></defs>
+            <ellipse cx="128" cy="276" rx="76" ry="8" fill="#07090c" opacity=".75"/>
+            <path d="M128 175 L128 268" stroke="url(#lampStem)" strokeWidth="9" strokeLinecap="round"/><path d="M83 273 Q128 258 173 273 L183 280 Q128 292 73 280Z" fill="url(#lampStem)" stroke="#e0b65e" strokeOpacity=".45"/>
+            <path d="M85 80 Q128 60 171 80 L155 128 Q128 139 101 128Z" fill="url(#lampShade)" stroke="#f5d27a" strokeWidth="2"/><ellipse cx="128" cy="81" rx="43" ry="10" fill="#f4d17a"/><path d="M107 127 Q128 141 149 127" fill="none" stroke="#e7bd62" strokeWidth="4"/><path d="M128 74 V60" stroke="#d8b46a" strokeWidth="7" strokeLinecap="round"/><path d="M128 58 V44" stroke="#b9914b" strokeWidth="4"/>
+            <path d="M162 117 Q177 131 177 153" fill="none" stroke="#c9a45f" strokeWidth="2.2"/><path d="M177 153 V176" stroke="#d7b66d" strokeWidth="2.2"/><circle cx="177" cy="183" r="6" fill="#d4aa55" stroke="#fff0bb" strokeWidth="1.5"/>
+          </svg>
+          <svg className="lamp-cord" viewBox="0 0 50 120" aria-label={tr(lang, "ল্যাম্পের টানার দড়ি", "Lamp pull cord")}>
+            <path d={`M25 0 Q${25 + pull * .16} ${28 + pull * .35} 25 ${55 + pull}`} fill="none" stroke="#e5c477" strokeWidth="2.5" strokeLinecap="round"/>
+            <circle cx="25" cy={61 + pull} r="8" fill="#f4cf73" stroke="#fff0bd" strokeWidth="2" style={{filter:"drop-shadow(0 0 7px rgba(255,207,105,.8))"}} onPointerDown={startPull} onPointerMove={movePull} onPointerUp={endPull} onPointerCancel={endPull} />
+            <circle cx="25" cy={61 + pull} r="17" fill="transparent" style={{cursor:"grab",touchAction:"none"}} onPointerDown={startPull} onPointerMove={movePull} onPointerUp={endPull} onPointerCancel={endPull}/>
+          </svg>
+        </div>
+        <div className="lamp-desk" aria-hidden="true"><span/><span/><span/></div>
+        <div className="lamp-scene-copy"><span className="lamp-eyebrow">REUNION 2027 · REGISTRATION</span><strong>{on ? tr(lang, "আলো জ্বলে উঠেছে!", "You're all set to register!") : tr(lang, "একটু আলো জ্বালান", "Let’s light up your memories")}</strong><small>{on ? tr(lang, "পাশে আপনার নিবন্ধন ফর্মটি পূরণ করুন", "Your registration form is ready beside the lamp") : tr(lang, "ল্যাম্পের দড়ি নিচে টানুন", "Pull down the cord to reveal the form")}</small></div>
+        <button type="button" className="lamp-accessible-toggle" onClick={toggle} aria-pressed={on}>{on ? tr(lang, "আলো বন্ধ করুন", "Turn light off") : tr(lang, "লাইট অন করুন", "Turn light on")}</button>
+      </div>
+      <div className="lamp-form-reveal" aria-hidden={!on} inert={!on}>
+        {children}
+      </div>
+    </section>
+  );
+}
 
 export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, emailRequired = true, tshirtEnabled = false, tshirtRequired = false, tshirtSizes = ["S","M","L","XL","XXL","XXXL"] }) {
   const methods = pay.methods || [];
@@ -203,7 +277,7 @@ export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, em
       const j = await r.json().catch(() => ({}));
       if (!r.ok) { setErr(serverError(lang, r.status, j)); return; }
       try { sessionStorage.removeItem(DRAFT_KEY); } catch {}
-      setDone({ trx: v.trx_id, regCode: j.reg_code, emailSent: j.email_sent === true, emailSkipped: j.email_skipped === true });
+      setDone({ trx: v.trx_id, regCode: j.reg_code || null, emailSent: j.email_sent === true, emailQueued: j.email_queued === true, emailSkipped: j.email_skipped === true });
       top();
     } catch { setErr(t(lang, "networkError")); }
     finally { setBusy(false); }
@@ -212,16 +286,19 @@ export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, em
   if (done)
     return (
       <div className="card success-card" role="status">
-        <div className="state-icon ok" aria-hidden="true">✓</div>
+        <Confetti />
+        <div className="state-icon ok tick" aria-hidden="true"><svg viewBox="0 0 52 52" focusable="false"><circle cx="26" cy="26" r="23" /><path d="M15 27.5l8 8L38 18" /></svg></div>
         <h2>{t(lang, "sent")}</h2>
         <p>{t(lang, "sentNote")}</p>
-        <div className="status-reference"><span>{tr(lang, "নিবন্ধন নম্বর", "Registration Number")}</span><b>{done.regCode || "—"}</b></div>
+        <div className="status-reference"><span>{tr(lang, "নিবন্ধন নম্বর", "Registration Number")}</span><b>{done.regCode || tr(lang, "অনুমোদনের পর দেওয়া হবে", "Assigned after approval")}</b></div>
         <div className="status-reference"><span>TrxID</span><b>{done.trx}</b></div>
         {emailEnabled && <p className="muted">{done.emailSkipped
           ? tr(lang, "ইমেইল ঠিকানা দেওয়া হয়নি, তাই ইমেইল পাঠানো হয়নি।", "No email address was provided, so no email was sent.")
           : done.emailSent
-            ? tr(lang, "নিবন্ধনের তথ্য ও ID Card ডাউনলোড লিংক আপনার ইমেইলে পাঠানো হয়েছে। অনুমোদনের পর একই লিংক থেকে কার্ড ডাউনলোড করতে পারবেন।", "Registration details and your ID-card link have been emailed to you. After approval, use the same link to download the card.")
-            : tr(lang, "ইমেইল পাঠানো যায়নি। আপনার নিবন্ধন সংরক্ষিত হয়েছে—নম্বর ও TrxID সংরক্ষণ করুন এবং ইমেইল ঠিকানা পরীক্ষা করুন।", "The email could not be sent. Your registration is saved—keep your registration number and transaction ID.")}</p>}
+            ? tr(lang, "নিবন্ধনের নিশ্চিতকরণ ইমেইল পাঠানো হয়েছে। অনুমোদনের পর ID নম্বর তৈরি হবে।", "Your confirmation email has been sent. Your registration ID will be assigned after approval.")
+            : done.emailQueued
+              ? tr(lang, "ইমেইল এখনো পাঠানো যায়নি; queue-তে রেখে পুনরায় পাঠানোর ব্যবস্থা করা হয়েছে।", "Email could not be sent immediately; it has been queued for retry.")
+              : tr(lang, "নিবন্ধন সংরক্ষিত হয়েছে, তবে ইমেইল queue করা যায়নি। TrxID ও ফোন নম্বর সংরক্ষণ করুন।", "Your registration is saved, but the email could not be queued. Keep your TrxID and phone number.")}</p>}
         <p className="muted">{tr(lang, "আপনার TrxID ও নিবন্ধিত ফোন নম্বর সংরক্ষণ করে রাখুন — স্ট্যাটাস দেখতে দুটোই লাগবে।", "Keep your TrxID and registered phone number — you need both to check your status.")}</p>
         <div className="row" style={{ justifyContent: "center" }}><Link className="btn" href="/status">{t(lang, "checkStatus")}</Link></div>
       </div>
@@ -232,6 +309,7 @@ export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, em
 
   return (
     <div className="reg-form">
+      <LampReveal lang={lang}>
       <ol className="stepper" aria-label={tr(lang, "নিবন্ধনের ধাপ", "Registration steps")}>
         <li className={step === 1 ? "is-current" : "is-done"} aria-current={step === 1 ? "step" : undefined}><i>{step > 1 ? "✓" : nf.format(1)}</i><span>{tr(lang, "আপনার তথ্য", "Your details")}</span></li>
         <li className={step === 2 ? "is-current" : ""} aria-current={step === 2 ? "step" : undefined}><i>{nf.format(2)}</i><span>{tr(lang, "পেমেন্ট", "Payment")}</span></li>
@@ -239,44 +317,19 @@ export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, em
 
       {/* ---------- Step 1: personal details ---------- */}
       <form onSubmit={next} noValidate hidden={step !== 1}>
-        <div className="form-card">
-          <label htmlFor="full_name">{t(lang, "fullName")}</label>
-          <input id="full_name" name="full_name" autoComplete="name" required maxLength={80} value={form.full_name} onChange={set("full_name")} />
-
-          <label htmlFor="ssc_batch">{t(lang, "batch")}</label>
-          <input id="ssc_batch" name="ssc_batch" required inputMode="numeric" maxLength={4} placeholder="2010" value={form.ssc_batch} onChange={set("ssc_batch", digits4)} />
-
-          <label htmlFor="profession">{t(lang, "profession")}</label>
-          <input id="profession" name="profession" list="profession-options" required maxLength={100}
-            placeholder={tr(lang, "যেমন: শিক্ষক, ইঞ্জিনিয়ার, শিক্ষার্থী", "e.g. Teacher, Engineer, Student")} value={form.profession} onChange={set("profession")} />
-          <datalist id="profession-options">
-            {["Student", "Teacher", "Engineer", "Doctor", "Business", "Government Job", "Private Job", "Freelancer", "Other"].map((o) => <option key={o} value={o} />)}
-          </datalist>
-
-          <label htmlFor="phone">{t(lang, "mobile")}</label>
-          <input id="phone" name="phone" type="tel" autoComplete="tel" required inputMode="numeric" maxLength={16} placeholder="017XXXXXXXX" value={form.phone} onChange={set("phone", normalizeDigits)} />
-
-          {emailEnabled && <>
-            <label htmlFor="email">{tr(lang, "ইমেইল ঠিকানা", "Email address")} {emailRequired ? "*" : tr(lang, "(ঐচ্ছিক)", "(optional)")}</label>
-            <input id="email" name="email" type="email" autoComplete="email" maxLength={254} required={emailRequired} value={form.email} onChange={set("email")} placeholder="name@example.com" />
-          </>}
-
-          {tshirtEnabled && <>
-            <label htmlFor="tshirt_size">{tr(lang, "T-shirt Size", "T-shirt Size")} {tshirtRequired ? "*" : tr(lang, "(ঐচ্ছিক)", "(optional)")}</label>
-            <select id="tshirt_size" name="tshirt_size" value={form.tshirt_size} required={tshirtRequired} onChange={set("tshirt_size")}>
-              <option value="">{tr(lang, "সাইজ নির্বাচন করুন", "Select size")}</option>
-              {tshirtSizes.map(size => <option key={size} value={size}>{size}</option>)}
-            </select>
-          </>}
-
-          <label htmlFor="photo">{t(lang, "photo")}</label>
-          <input id="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPhoto} />
-          <small className="hint">{t(lang, "photoHint")}</small>
-          {photoBusy && <p className="muted" role="status">{t(lang, "loading")}</p>}
-          {preview && <p className="photo-preview"><img className="avatar" src={preview} alt={tr(lang, "ছবির প্রিভিউ", "Photo preview")} /><span>{Math.round(photo.size / 1024)} KB ✓</span></p>}
-
-          {err && step === 1 && <p className="error-panel" role="alert">{err}</p>}
-          <div className="row"><button className="btn" disabled={photoBusy}>{tr(lang, "পরবর্তী ধাপ: পেমেন্ট →", "Next: Payment →")}</button></div>
+        <div className="form-card registration-form-card">
+          <div className="registration-form-intro"><span className="registration-form-kicker">{tr(lang, "আপনার তথ্য", "YOUR DETAILS")}</span><p>{tr(lang, "সঠিক তথ্য দিয়ে ফর্মটি পূরণ করুন। * চিহ্নিত ঘরগুলো বাধ্যতামূলক।", "Please enter your details carefully. Fields marked * are required.")}</p></div>
+          <div className="registration-fields-grid">
+            <div className="registration-field"><label htmlFor="full_name">{t(lang, "fullName")} *</label><input id="full_name" name="full_name" autoComplete="name" required maxLength={80} value={form.full_name} onChange={set("full_name")} placeholder={tr(lang, "আপনার পূর্ণ নাম লিখুন", "Enter your full name")} /></div>
+            <div className="registration-field"><label htmlFor="ssc_batch">{t(lang, "batch")} *</label><input id="ssc_batch" name="ssc_batch" required inputMode="numeric" maxLength={4} placeholder="2010" value={form.ssc_batch} onChange={set("ssc_batch", digits4)} /></div>
+            <div className="registration-field"><label htmlFor="profession">{t(lang, "profession")} *</label><input id="profession" name="profession" list="profession-options" required maxLength={100} placeholder={tr(lang, "যেমন: শিক্ষক, ইঞ্জিনিয়ার, শিক্ষার্থী", "e.g. Teacher, Engineer, Student")} value={form.profession} onChange={set("profession")} /><datalist id="profession-options">{["Student", "Teacher", "Engineer", "Doctor", "Business", "Government Job", "Private Job", "Freelancer", "Other"].map((o) => <option key={o} value={o} />)}</datalist></div>
+            <div className="registration-field"><label htmlFor="phone">{t(lang, "mobile")} *</label><input id="phone" name="phone" type="tel" autoComplete="tel" required inputMode="numeric" maxLength={16} placeholder="017XXXXXXXX" value={form.phone} onChange={set("phone", normalizeDigits)} /></div>
+            {emailEnabled && <div className="registration-field"><label htmlFor="email">{tr(lang, "ইমেইল ঠিকানা", "Email address")} {emailRequired ? "*" : tr(lang, "(ঐচ্ছিক)", "(optional)")}</label><input id="email" name="email" type="email" autoComplete="email" maxLength={254} required={emailRequired} value={form.email} onChange={set("email")} placeholder="name@example.com" /></div>}
+            {tshirtEnabled && <div className="registration-field"><label htmlFor="tshirt_size">{tr(lang, "T-shirt Size", "T-shirt Size")} {tshirtRequired ? "*" : tr(lang, "(ঐচ্ছিক)", "(optional)")}</label><select id="tshirt_size" name="tshirt_size" value={form.tshirt_size} required={tshirtRequired} onChange={set("tshirt_size")}><option value="">{tr(lang, "সাইজ নির্বাচন করুন", "Select size")}</option>{tshirtSizes.map(size => <option key={size} value={size}>{size}</option>)}</select></div>}
+            <div className="registration-field registration-field-wide photo-upload-field"><label htmlFor="photo">{t(lang, "photo")} *</label><input id="photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={pickPhoto} /><small className="hint">{t(lang, "photoHint")}</small>{photoBusy && <p className="muted" role="status">{t(lang, "loading")}</p>}{preview && <p className="photo-preview"><img className="avatar" src={preview} alt={tr(lang, "ছবির প্রিভিউ", "Photo preview")} /><span>{Math.round(photo.size / 1024)} KB ✓</span></p>}</div>
+            {err && step === 1 && <p className="error-panel registration-field-wide" role="alert">{err}</p>}
+            <div className="registration-actions"><button className="btn" disabled={photoBusy}>{tr(lang, "পরবর্তী ধাপ: পেমেন্ট →", "Next: Payment →")}</button></div>
+          </div>
         </div>
       </form>
 
@@ -325,9 +378,7 @@ export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, em
               ))}
               {pay.note && <p className="pay-note">{pay.note}</p>}
 
-              <label htmlFor="trx_id">{trxLabel}</label>
-              <input id="trx_id" name="trx_id" required maxLength={40} autoComplete="off" autoCapitalize="characters" value={form.trx_id} onChange={set("trx_id", normalizeTrx)} />
-              <small className="hint">{tr(lang, "টাকা পাঠানোর পর SMS বা অ্যাপে পাওয়া ট্রানজ্যাকশন আইডি এখানে লিখুন।", "Enter the transaction ID you received by SMS or in the app after paying.")}</small>
+              <div className="registration-field registration-field-wide trx-field"><label htmlFor="trx_id">{trxLabel} *</label><input id="trx_id" name="trx_id" required maxLength={40} autoComplete="off" autoCapitalize="characters" value={form.trx_id} onChange={set("trx_id", normalizeTrx)} /><small className="hint">{tr(lang, "টাকা পাঠানোর পর SMS বা অ্যাপে পাওয়া ট্রানজ্যাকশন আইডি এখানে লিখুন।", "Enter the transaction ID you received by SMS or in the app after paying.")}</small></div>
             </>
           )}
 
@@ -338,6 +389,7 @@ export default function RegisterForm({ pay, lang = "bn", emailEnabled = true, em
           </div>
         </div>
       </form>
+      </LampReveal>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import crypto from "crypto";
+import { after } from "next/server";
 import { db } from "../../../lib/supabase";
 import { csrfGuard, rateLimit, validImageSignature } from "../../../lib/security";
 import { fail, json, dbFail } from "../../../lib/http";
 import { normalizeDigits, normalizePhone, normalizeTrx, PHONE_RE, TRX_RE } from "../../../lib/format";
 import { paymentMethods } from "../../../lib/settings";
-import { sendRegistrationEmail } from "../../../lib/email";
+import { processEmailOutboxJob } from "../../../lib/email";
+import { insertCompat, uploadCompat } from "../../../lib/db-compat";
 
 export const runtime = "nodejs";
 const MAX = 220 * 1024;
@@ -64,32 +66,62 @@ export async function POST(req) {
   if (dupError) return dbFail("register:lookup", "Could not validate transaction ID. Try again.", dupError, { status: 503 });
   if (dup) return fail("This transaction ID has already been used.", 409);
 
-  const { data: regCode, error: codeError } = await sb.rpc("next_registration_code");
-  if (codeError || typeof regCode !== "string" || !/^REU-\d{4,}$/.test(regCode)) {
-    return dbFail("register:code", "Could not generate registration number. Run the latest supabase/schema.sql.", codeError || new Error("Invalid registration code"), { status: 503 });
+  // Same person registering twice (same phone number AND same name) is almost always a mistake.
+  // Different people may share a phone (family), so a phone match alone is allowed.
+  const { data: samePhone, error: phoneError } = await sb.from("registrations").select("full_name").eq("phone", phone).limit(20);
+  if (phoneError) return dbFail("register:phone-lookup", "Could not validate your details. Try again.", phoneError, { status: 503 });
+  const key = (v) => String(v || "").normalize("NFC").replace(/\s+/g, " ").trim().toLowerCase();
+  if ((samePhone || []).some((r) => key(r.full_name) === key(name))) {
+    return fail("This name and phone number are already registered. Use the Status page with your TrxID and phone number to check it.", 409);
+  }
+
+
+  // Same e-mail address + same name is the same person registering again (a family may share an address, so the name must match too).
+  if (email) {
+    const { data: sameEmail, error: emailLookupError } = await sb.from("registrations").select("full_name").eq("email", email).limit(20);
+    if (emailLookupError) return dbFail("register:email-lookup", "Could not validate your details. Try again.", emailLookupError, { status: 503 });
+    if ((sameEmail || []).some((r) => key(r.full_name) === key(name))) {
+      return fail("This name and phone number are already registered. Use the Status page with your TrxID and phone number to check it.", 409);
+    }
   }
 
   const photoPath = `${crypto.randomUUID()}.${ext}`;
-  const up = await sb.storage.from("photos").upload(photoPath, bytes, { contentType: photo.type, upsert: false });
+  const up = await uploadCompat(sb, "photos", photoPath, bytes, { contentType: photo.type, upsert: false }, { public: false, fileSizeLimit: 1024 * 1024, allowedMimeTypes: ["image/jpeg", "image/png", "image/webp"] });
   if (up.error) return dbFail("register:upload", "Photo upload failed. Try again.", up.error);
 
   const row = {
     full_name: name, ssc_batch: batch, phone, email: emailEnabled ? (email || null) : null,
     tshirt_size: tshirtEnabled ? (tshirtSize || null) : null,
-    profession, photo_path: photoPath, trx_id: trx, pay_method: method, reg_code: regCode,
+    profession, photo_path: photoPath, trx_id: trx, pay_method: method, reg_code: null,
+    fee_amount: Number(st?.amount || 0),
   };
-  const { data: inserted, error } = await sb.from("registrations").insert(row).select("*").single();
+  // fee_amount is optional: an older database without that column still accepts the registration.
+  const { data: inserted, error } = await insertCompat(sb, "registrations", row, ["fee_amount"], "*");
   if (error) {
     await sb.storage.from("photos").remove([photoPath]);
     if (error.code === "23505") return fail("This transaction ID or registration number has already been used.", 409);
     return dbFail("register:insert", "Registration could not be saved. Run the latest supabase/schema.sql.", error);
   }
 
-  let emailSent = false;
-  let emailSkipped = !email;
+  let emailQueued = false, emailSent = false, emailError = null;
   if (email) {
-    const mail = await sendRegistrationEmail(inserted);
-    emailSent = mail.sent === true;
+    const { data: queuedJob, error: queueError } = await sb.from("email_outbox")
+      .upsert({ registration_id: inserted.id, email_type: "registered", status: "queued", available_at: new Date().toISOString() },
+        { onConflict: "registration_id,email_type", ignoreDuplicates: true })
+      .select("id").maybeSingle();
+    if (queueError) console.error("[register:email-queue]", queueError.message);
+    else {
+      emailQueued = true;
+      // Send AFTER the response: a slow SMTP server must never keep the visitor waiting on the form.
+      // If it fails, the job stays in email_outbox and the cron / admin "retry" picks it up.
+      if (queuedJob?.id) {
+        const jobId = queuedJob.id;
+        after(async () => {
+          try { await processEmailOutboxJob(jobId); }
+          catch (e) { console.error("[register:email-after]", e?.message || e); }
+        });
+      }
+    }
   }
-  return json({ ok: true, reg_code: regCode, email_sent: emailSent, email_skipped: emailSkipped });
+  return json({ ok: true, registration_id: inserted.id, status: "pending", email_sent: emailSent, email_queued: emailQueued, email_error: emailError, email_skipped: !email });
 }

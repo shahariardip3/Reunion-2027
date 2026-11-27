@@ -13,6 +13,9 @@ import EmailHistoryTab from "./EmailHistoryTab";
 import SubAdminsTab from "./SubAdminsTab";
 import RecycleBinTab from "./RecycleBinTab";
 import ActivityLogTab from "./ActivityLogTab";
+import GalleryTab from "./GalleryTab";
+import HistoryTab from "./HistoryTab";
+import SessionsTab from "./SessionsTab";
 
 export default function AdminPanel({
   settings,
@@ -21,6 +24,8 @@ export default function AdminPanel({
   notices = [],
   role = "main",
   adminName = "Admin",
+  galleryPhotos = [],
+  historyEvents = [],
 }) {
   const router = useRouter();
   const [tab, setTab] = useState("registrations");
@@ -55,7 +60,6 @@ export default function AdminPanel({
     .filter((item) => item.count > 0);
   const approvedWithoutSize = regs.filter((r) => r.status === "approved" && !r.tshirt_size).length;
 
-  const amount = Number(settings.amount) || 0;
 
   // Sub Admins only receive registration approval and QR scanning tools.
   const tabs = [
@@ -63,11 +67,14 @@ export default function AdminPanel({
     ["checkin", tr(lang, "QR চেক-ইন", "QR Check-in"), 0],
     ...(role === "main" ? [
       ["notices", t(lang, "notice"), 0],
+      ["gallery", tr(lang, "ফটো গ্যালারি", "Photo Gallery"), galleryPhotos.length],
+      ["history", tr(lang, "ইতিহাস টাইমলাইন", "History timeline"), historyEvents.length],
       ["settings", tr(lang, "সেটিংস", "Settings"), 0],
       ["email", tr(lang, "ইমেইল ইতিহাস", "Email History"), 0],
       ["subadmins", tr(lang, "Sub Admins", "Sub Admins"), 0],
       ["recycle", tr(lang, "Recycle Bin", "Recycle Bin"), 0],
       ["activity", tr(lang, "Activity Log", "Activity Log"), 0],
+      ["sessions", tr(lang, "সেশন ম্যানেজমেন্ট", "Sessions"), 0],
       ["system", tr(lang, "সিস্টেম চেক", "System check"), 0],
     ] : []),
   ];
@@ -97,14 +104,6 @@ export default function AdminPanel({
     [
       nf.format(foodReceived),
       tr(lang, "Food নিয়েছে", "Food Received"),
-    ],
-    [
-      `৳ ${nf.format(approved * amount)}`,
-      tr(
-        lang,
-        "অনুমোদিত ফি (আনুমানিক)",
-        "Approved Fees (Est.)"
-      ),
     ],
   ];
 
@@ -212,6 +211,10 @@ export default function AdminPanel({
           />
         )}
 
+        {role === "main" && tab === "gallery" && <GalleryTab photos={galleryPhotos} lang={lang} />}
+
+        {role === "main" && tab === "history" && <HistoryTab events={historyEvents} lang={lang} />}
+
         {role === "main" && tab === "settings" && (
           <SettingsTab
             settings={settings}
@@ -223,6 +226,7 @@ export default function AdminPanel({
         {role === "main" && tab === "subadmins" && <SubAdminsTab lang={lang} />}
         {role === "main" && tab === "recycle" && <RecycleBinTab lang={lang} />}
         {role === "main" && tab === "activity" && <ActivityLogTab lang={lang} />}
+        {role === "main" && tab === "sessions" && <SessionsTab />}
         {role === "main" && tab === "system" && <DiagnosticsTab lang={lang} />}
       </div>
     </>

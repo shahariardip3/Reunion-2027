@@ -33,6 +33,25 @@ export function parseLookup(value) {
   return null;
 }
 
+/** Sound + vibration so a gate volunteer knows the result without looking at the screen. kind: ok | warn | bad */
+function feedback(kind) {
+  try {
+    if (navigator.vibrate) navigator.vibrate(kind === "ok" ? 60 : kind === "warn" ? [80, 60, 80] : [200, 80, 200]);
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "sine";
+    osc.frequency.value = kind === "ok" ? 880 : kind === "warn" ? 520 : 220;
+    gain.gain.value = 0.08;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + (kind === "ok" ? 0.12 : 0.3));
+    osc.onended = () => ctx.close();
+  } catch { /* Audio/vibration are best-effort. */ }
+}
+
 export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
@@ -60,31 +79,54 @@ export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
 
     video.srcObject = streamRef.current;
 
-    const detector = new window.BarcodeDetector({
-      formats: ["qr_code"],
-    });
+    // Chrome on Android/macOS has a built-in QR detector; desktop Chrome/Firefox/Safari do not,
+    // so everywhere else the QR code is decoded in JavaScript (jsQR) from the camera frames.
+    let nativeDetector = null;
+    try {
+      if ("BarcodeDetector" in window) nativeDetector = new window.BarcodeDetector({ formats: ["qr_code"] });
+    } catch { nativeDetector = null; }
+    let decodeFrame = null;
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+    const finish = (raw) => {
+      const text = String(raw || "").trim();
+      if (!text) return false;
+      setValue(text);
+      stopCamera();
+      verifyRef.current?.(text);
+      return true;
+    };
 
     const scan = async () => {
       if (!active) return;
 
       try {
-        const codes = await detector.detect(video);
-
-        if (codes.length && codes[0].rawValue) {
-          const raw = codes[0].rawValue.trim();
-          setValue(raw);
-          stopCamera();
-          verifyRef.current?.(raw);
-          return;
+        if (video.readyState >= 2 && video.videoWidth) {
+          if (nativeDetector) {
+            const codes = await nativeDetector.detect(video);
+            if (codes.length && finish(codes[0].rawValue)) return;
+          } else {
+            if (!decodeFrame) decodeFrame = (await import("jsqr")).default;
+            if (!active) return;
+            const scale = Math.min(1, 720 / video.videoWidth);
+            canvas.width = Math.round(video.videoWidth * scale);
+            canvas.height = Math.round(video.videoHeight * scale);
+            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = decodeFrame(image.data, image.width, image.height, { inversionAttempts: "attemptBoth" });
+            if (code?.data && finish(code.data)) return;
+          }
         }
       } catch {}
 
-      if (active) frame = requestAnimationFrame(scan);
+      // jsQR is heavier than the native detector, so look ~8 times a second instead of every frame.
+      if (active) frame = nativeDetector ? requestAnimationFrame(scan) : window.setTimeout(scan, 120);
     };
 
     const begin = () => {
       video.play().then(() => {
-        if (active) frame = requestAnimationFrame(scan);
+        if (active) frame = nativeDetector ? requestAnimationFrame(scan) : window.setTimeout(scan, 120);
       }).catch(() => {
         setError(
           tr(lang, "ক্যামেরা চালু করা যায়নি।", "Could not start the camera preview.")
@@ -100,7 +142,7 @@ export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
 
     return () => {
       active = false;
-      if (frame) cancelAnimationFrame(frame);
+      if (frame) { cancelAnimationFrame(frame); clearTimeout(frame); }
       video.onloadedmetadata = null;
       video.srcObject = null;
     };
@@ -116,19 +158,9 @@ export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
     setError("");
     setResult(null);
 
-    if (!("BarcodeDetector" in window)) {
-      return setError(
-        tr(
-          lang,
-          "এই ব্রাউজারে QR স্ক্যান চলে না। Chrome ব্যবহার করুন অথবা Registration ID লিখুন।",
-          "QR scanning is not supported in this browser. Use Chrome or enter the Registration ID."
-        )
-      );
-    }
-
     if (!navigator.mediaDevices?.getUserMedia) {
       return setError(
-        tr(lang, "ক্যামেরার জন্য HTTPS দরকার।", "Camera requires HTTPS.")
+        tr(lang, "ক্যামেরার জন্য HTTPS (নিরাপদ ঠিকানা) দরকার।", "The camera needs a secure (HTTPS) address.")
       );
     }
 
@@ -186,8 +218,10 @@ export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
 
       setLookup(parsed);
       setResult(data);
+      feedback(data?.registration?.attended_at ? "warn" : "ok");
     } catch (err) {
       setError(err.message || tr(lang, "নেটওয়ার্ক সমস্যা।", "Network error."));
+      feedback("bad");
     } finally {
       setBusy(false);
     }
@@ -366,7 +400,7 @@ export default function CheckinScanner({ lang = "en", tshirtEnabled = false }) {
       {error && <p className="error-panel" role="alert">{error}</p>}
 
       {reg && (
-        <div className="checkin-result" role="status">
+        <div className={`checkin-result ${reg.attended_at ? "is-repeat" : "is-fresh"}`} role="status">
           <span className="badge approved">
             {tr(lang, "যাচাইকৃত নিবন্ধন", "Verified registration")}
           </span>

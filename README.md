@@ -2,6 +2,10 @@
 
 Next.js + Supabase। বাংলা/ইংরেজি, মোবাইল-ফার্স্ট, ডিফল্ট লাইট থিম (হেডারের 🌙 বাটনে ডার্ক থিম)।
 
+## v8 — একসাথে Reliability, Security, Operations ও Gallery Upgrade
+
+এই ZIP-এ v8–v11 roadmap একত্রে আনা হয়েছে। আগে `V8-ALL-UPGRADES-BN.md` এবং `V8-TEST-AND-LAUNCH.md` পড়ুন। Supabase SQL Editor-এ `supabase/schema.sql`-এর সম্পূর্ণ script চালান, `.env.local`-এ `CRON_SECRET` যোগ করুন এবং email outbox-এর জন্য `/api/cron/email-outbox` scheduler configure করুন।
+
 ## দ্রুত শুরু
 
 বাংলা ধাপে ধাপে নির্দেশনা: `START-HERE-BN.md`। আগের Supabase project সচল থাকলে নতুন project তৈরি করার দরকার নেই।
@@ -20,10 +24,10 @@ Next.js + Supabase। বাংলা/ইংরেজি, মোবাইল-ফ
 ## কী কী নতুন
 
 - **ডিজাইন:** হালকা (light) থিম, স্কুলের গেটের ছবি হেরো ব্যানার ও ব্যাকগ্রাউন্ডে, নরম অ্যানিমেশন, ডার্ক থিম বাটন।
-- **নিবন্ধন ২ ধাপে:** ধাপ ১ তথ্য, Email ও ছবি → ধাপ ২ পেমেন্ট (bKash / Nagad / ব্যাংক, কপি বাটনসহ)। নিবন্ধনের পর Registration Number ও TrxID-সহ ইমেইল; অনুমোদনের পর ID Card লিংকসহ দ্বিতীয় ইমেইল।
+- **নিবন্ধন ২ ধাপে:** ধাপ ১ তথ্য, Email ও ছবি → ধাপ ২ পেমেন্ট (bKash / Nagad / ব্যাংক, কপি বাটনসহ)। Pending অবস্থায় TrxID + ফোন দিয়ে Status দেখা যায়; approval-এর সময় Registration Number তৈরি হয়। Confirmation ও approval email background outbox queue দিয়ে পাঠানো হয়।
 - **পেমেন্ট:** অ্যাডমিন সেটিংসে bKash ও Nagad-এর আলাদা নম্বর; **ব্যাংক তথ্য ঐচ্ছিক** (অ্যাকাউন্ট নম্বর না দিলে ব্যাংক অপশন দেখাবে না)। কোন মাধ্যমে পেমেন্ট হয়েছে তা অ্যাডমিন তালিকায় দেখা যায়।
 - **SEO:** দুই ভাষার টাইটেল/ডেসক্রিপশন, কিওয়ার্ড, Open Graph (Facebook/WhatsApp প্রিভিউ), sitemap.xml, robots.txt, structured data (বিদ্যালয় + ইভেন্ট), canonical লিংক, স্কুল পরিচিতি ও FAQ সেকশন।
-- **অ্যাডমিন:** Main Admin ও সর্বোচ্চ ৫টি Sub Admin; role-based permissions, Main Admin re-authentication, Recycle Bin (Restore/Permanent Delete), append-only Activity Log, Email History ও failed email retry।
+- **অ্যাডমিন:** Main Admin ও সর্বোচ্চ ৫টি Sub Admin; role-based permissions, server-side revocable sessions, payment reconciliation, bulk actions, Recycle Bin, Activity Log, Email History, gallery caption/pin/order/bulk upload।
 - **অন্যান্য:** শেয়ার বাটন, ক্যালেন্ডারে যোগ (.ics), লাইভ কাউন্টডাউন, নিবন্ধন চালু/বন্ধ সুইচ, QR চেক-ইন (QR না চললে আইডি লিখে), Admin-controlled T-shirt size options।
 - **সব ডিভাইসে:** Android, iPhone/iPad, Windows, Mac, Linux — পুরোনো ব্রাউজারের (Android ৫+ Chrome ৮০, iOS ১৩) জন্য কোড কম্পাইল, সব OS-এর বাংলা ফন্ট ফলব্যাক।
 
@@ -64,3 +68,16 @@ Next.js + Supabase। বাংলা/ইংরেজি, মোবাইল-ফ
 - **iPhone-এ ছবি আপলোড:** Settings → Camera → Formats → "Most Compatible" দিলে JPG হবে।
 
 নিরাপত্তার বিস্তারিত: `SECURITY-AND-SETUP.md`
+
+
+## Admin-managed dual photo galleries
+
+The homepage contains separate Memories and Reunion Photo Gallery sections. Main Admin can upload JPG/PNG/WebP photos (up to 8 MB) with Bangla/English captions and delete them from Admin Panel → Photo Gallery. The `gallery_photos` table and public `gallery-photos` bucket are provisioned by the safe, re-runnable `supabase/schema.sql` migration. The previous bundled static gallery collage has been removed.
+
+
+## V8.4 Email History Fix
+Read `EMAIL-HISTORY-FIX-V8.4-BN.md` for the queue/history fix and SMS integration status.
+
+
+## V8.5 Email Auto-Send Fix
+Registration/approval এখন সঙ্গে সঙ্গে email পাঠানোর চেষ্টা করে; ব্যর্থ হলে queue-তে রেখে retry করে। বিস্তারিত `EMAIL-AUTOSEND-FIX-V8.5-BN.md` দেখুন। Vercel Cron schedule `vercel.json`-এ আছে।

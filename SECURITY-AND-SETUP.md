@@ -24,7 +24,7 @@
 - Session hijacking: HttpOnly, Secure in production, SameSite=Strict cookie; signed, expiring, random session token; eight-hour lifetime.
 - File upload: size and MIME allowlist plus JPEG/PNG/WebP magic-byte validation; random storage object names; private storage bucket.
 - Clickjacking: `frame-ancestors 'none'` and `X-Frame-Options: DENY`.
-- Security headers: CSP, HSTS, nosniff, referrer policy, permissions policy, COOP/CORP; `X-Powered-By` disabled.
+- Security headers: CSP, HSTS, nosniff, referrer policy, permissions policy, COOP (no CORP header on purpose: it would block the logo and OG image in emails and link previews); `X-Powered-By` disabled.
 - Bilingual interface: Bangla and English switcher; separate Bengali and English event title, description, venue and payment instructions in Admin settings.
 
 ## Risks that need hosting / operational controls
@@ -43,8 +43,8 @@ DDoS protection at scale cannot be guaranteed by app-level rate limiting. Enable
 When the admin enables the public Alumni page, approved alumni names and photos are visible to visitors. Obtain consent before enabling it. Phone numbers and transaction IDs are not included in that public list.
 
 
-## Notice board upgrade
-After applying the existing schema/security migrations, run `supabase/notices_migration.sql` once in the Supabase SQL Editor. The public `/notice` page only displays published, non-expired notices. Admins can create bilingual notices, save drafts, pin important notices, set expiry dates, edit, and delete them from `/admin`.
+## Notice board
+The `notices` table is already part of `supabase/schema.sql` (no separate migration file is needed). The public `/notice` page only displays published, non-expired notices. Admins can create bilingual notices, save drafts, pin important notices, set expiry dates, edit, and delete them from `/admin`.
 
 The footer credits Al Shahariar Dip (SSC Batch 2021, currently KUET ECE). School display name is corrected to “গঙ্গানন্দপুর মাধ্যমিক বিদ্যালয়”.
 

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import QRCode from "qrcode";
 import { t, tr } from "../../lib/i18n";
@@ -8,21 +8,46 @@ export default function CardClient({ lang = "en" }) {
   const [d, setD] = useState(null);
   const [qr, setQr] = useState("");
   const [err, setErr] = useState("");
+  const tiltRef = useRef(null);
+
+  // Gentle 3D tilt that follows the pointer (mouse/pen only; touch and reduced-motion users get a flat card).
+  const tilt = (event) => {
+    const node = tiltRef.current;
+    if (!node || event.pointerType === "touch") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const box = node.getBoundingClientRect();
+    const x = (event.clientX - box.left) / box.width;
+    const y = (event.clientY - box.top) / box.height;
+    node.style.setProperty("--ry", `${((x - 0.5) * 9).toFixed(2)}deg`);
+    node.style.setProperty("--rx", `${((0.5 - y) * 7).toFixed(2)}deg`);
+    node.style.setProperty("--mx", `${(x * 100).toFixed(1)}%`);
+    node.style.setProperty("--my", `${(y * 100).toFixed(1)}%`);
+    node.classList.add("is-tilting");
+  };
+  const untilt = () => {
+    const node = tiltRef.current;
+    if (!node) return;
+    node.classList.remove("is-tilting");
+    node.style.setProperty("--rx", "0deg");
+    node.style.setProperty("--ry", "0deg");
+  };
 
   useEffect(() => {
     let cancelled = false;
     let lookup = null;
     try {
       const params = new URLSearchParams(window.location.search);
+      const token = params.get("t");
       const reg = params.get("reg");
       const trx = params.get("trx");
-      if (reg && trx) lookup = { reg_code: reg, trx };
+      if (token) lookup = { card_token: token };
+      else if (reg && trx) lookup = { reg_code: reg, trx }; // old e-mails keep working
       if (!lookup) lookup = JSON.parse(sessionStorage.getItem("reunion_card_lookup") || "null");
     } catch {}
-    if (!lookup?.trx || (!lookup?.phone && !lookup?.reg_code)) { setErr(t(lang, "statusFirst")); return; }
+    if (!lookup?.card_token && (!lookup?.trx || (!lookup?.phone && !lookup?.reg_code))) { setErr(t(lang, "statusFirst")); return; }
     (async () => {
       try {
-        const r = await fetch("/api/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trx: lookup.trx, phone: lookup.phone, reg_code: lookup.reg_code, lang }) });
+        const r = await fetch("/api/status", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ card_token: lookup.card_token, trx: lookup.trx, phone: lookup.phone, reg_code: lookup.reg_code, lang }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error(r.status === 429 ? t(lang, "tooMany") : t(lang, "statusFail"));
         if (j.status !== "approved") throw new Error(t(lang, "pendingNote"));
@@ -42,7 +67,7 @@ export default function CardClient({ lang = "en" }) {
   if (!d) return <div className="loading" role="status"><span className="spinner" aria-hidden="true" /><span className="sr-only">{t(lang, "loading")}</span></div>;
 
   return <>
-    <div className="confirmation-card" id="confirmation-pdf">
+    <div className="confirmation-card" id="confirmation-pdf" ref={tiltRef} onPointerMove={tilt} onPointerLeave={untilt}>
       <div className="confirmation-head">
         <img src="/logo-128.png" alt="" width="68" height="68" />
         <div>

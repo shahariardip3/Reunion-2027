@@ -3,8 +3,9 @@ import { db } from "../../../../lib/supabase";
 import { getAdminSession, verifyMainReauth } from "../../../../lib/auth";
 import { csrfGuard, rateLimit } from "../../../../lib/security";
 import { fail, json, dbFail, UUID_RE } from "../../../../lib/http";
-import { sendApprovalEmail } from "../../../../lib/email";
 import { writeAudit } from "../../../../lib/audit-log";
+import { processEmailOutboxJob } from "../../../../lib/email";
+import { requestOrigin } from "../../../../lib/site";
 
 export async function POST(req) {
   const session = await getAdminSession();
@@ -31,12 +32,24 @@ export async function POST(req) {
       const { data: code, error } = await sb.rpc("approve_registration", { p_id: id });
       if (error) return oops(action, "Could not approve registration.", error);
       await writeAudit("registration_approved", before, { previous_status: before.status, new_status: "approved", reg_code: code });
-      let emailSent = false;
+      let emailQueued = false, emailSent = false, emailError = null;
       if (before.status !== "approved" && before.email) {
-        const { data: approvedRow } = await sb.from("registrations").select("*").eq("id", id).maybeSingle();
-        if (approvedRow) emailSent = (await sendApprovalEmail(approvedRow)).sent === true;
+        const { data: queuedJob, error: queueError } = await sb.from("email_outbox")
+          .upsert({ registration_id: id, email_type: "approved", status: "queued", available_at: new Date().toISOString() },
+            { onConflict: "registration_id,email_type", ignoreDuplicates: true })
+          .select("id").maybeSingle();
+        if (queueError) console.error("[approval:email-queue]", queueError.message);
+        else {
+          emailQueued = true;
+          if (queuedJob?.id) {
+            const delivery = await processEmailOutboxJob(queuedJob.id, { baseUrl: requestOrigin(req.headers) });
+            emailSent = delivery.sent === true;
+            emailError = delivery.sent ? null : (delivery.error || null);
+            emailQueued = !emailSent;
+          }
+        }
       }
-      return json({ code, email_sent: emailSent });
+      return json({ code, email_sent: emailSent, email_queued: emailQueued, email_error: emailError });
     }
     case "reject": {
       const { data: before, error: readError } = await getRow();
